@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Clock, MapPin, Calendar, Zap, Package } from 'lucide-react';
+import { Clock, MapPin, Zap, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from 'recharts';
@@ -45,41 +45,9 @@ const Dashboard = () => {
   const activePersonnel = personnel.filter(p => p.is_active);
   const onBreakRecords = breaks.filter(b => b.break_end === null);
 
-  const stats = {
-    total: personnel.length,
-    active: activePersonnel.length,
-    onBreak: onBreakRecords.length,
-    movements: movements.length,
-    dayOffs: dayOffs.length,
-    overtimes: overtimes.length,
-  };
-
-  const cards = [
-    { title: 'Toplam Personel', value: stats.total, icon: Users, color: 'text-primary', bg: 'bg-primary/5' },
-    { title: 'Molada', value: stats.onBreak, icon: Clock, color: 'text-info', bg: 'bg-info/5' },
-    { title: 'Hareketler', value: stats.movements, icon: MapPin, color: 'text-warning', bg: 'bg-warning/5' },
-    { title: 'İzin Günleri', value: stats.dayOffs, icon: Calendar, color: 'text-secondary', bg: 'bg-secondary/5' },
-    { title: 'Fazla Mesai', value: stats.overtimes, icon: Zap, color: 'text-destructive', bg: 'bg-destructive/5' },
-    { title: 'Bekleyen Koli', value: shipments.filter((s: any) => s.total_boxes > s.counted_boxes).length, icon: Package, color: 'text-warning', bg: 'bg-warning/5' },
-  ];
-
   return (
     <div className="space-y-6 animate-fade-in">
-      <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        {cards.map((card) => (
-          <Card key={card.title} className={`glass-card ${card.bg}`}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <card.icon className={`h-5 w-5 ${card.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-foreground">{card.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <h2 className="text-2xl font-bold text-foreground">Kontrol Paneli</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />

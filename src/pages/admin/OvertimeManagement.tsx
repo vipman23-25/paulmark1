@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Trash2, Timer, RefreshCw } from 'lucide-react';
+import { Download, Plus, Trash2, Timer, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { utils, writeFile } from 'xlsx';
 
 const OvertimeManagement = () => {
   const queryClient = useQueryClient();
@@ -195,6 +196,21 @@ const OvertimeManagement = () => {
     return totalH < 0 ? `- ${formatted}` : formatted;
   };
 
+  const exportToExcel = () => {
+    const exportData = records.map((r: any) => ({
+      'Personel Ad Soyad': r.personnel ? `${r.personnel.first_name} ${r.personnel.last_name}` : 'Bilinmeyen',
+      'Tür': r.record_type || 'Bilinmiyor',
+      'Tarih': format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }),
+      'Süre': formatDuration(Number(r.hours)),
+      'Açıklama': r.description || '-'
+    }));
+
+    const ws = utils.json_to_sheet(exportData);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, "Fazla Mesai Raporu");
+    writeFile(wb, "Fazla_Mesai_Raporu.xlsx");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center flex-wrap gap-4">
@@ -202,6 +218,7 @@ const OvertimeManagement = () => {
           <Timer className="h-6 w-6" /> Fazla Mesai / Alacak Takibi
         </h2>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToExcel}><Download className="w-4 h-4 mr-2" /> Excel İndir</Button>
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Yenile">
             <RefreshCw className="h-4 w-4" />
           </Button>

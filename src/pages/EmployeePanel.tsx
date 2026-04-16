@@ -86,7 +86,7 @@ const EmployeePanel = () => {
     showSalesTargets: pVis.showSales ?? baseFeatures.showSalesTargets,
     showMovements: pVis.showMovements ?? baseFeatures.showMovements,
     showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
-    showCargoStatus: true, // Şimdilik tüm personele açık
+    showCargoStatus: pVis.showCargo ?? true,
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({

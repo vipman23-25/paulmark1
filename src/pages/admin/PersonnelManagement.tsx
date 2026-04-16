@@ -9,9 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
+import { Download, Plus, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Switch } from '@/components/ui/switch';
+import { utils, writeFile } from 'xlsx';
 
 interface Personnel {
   id: string;
@@ -31,7 +32,7 @@ interface Personnel {
     showLeave?: boolean;
     showSales?: boolean;
     showAnnouncements?: boolean;
-    showSurveys?: boolean;
+    showCargo?: boolean;
     showMovements?: boolean;
     showOvertime?: boolean;
     showOtherPersonnel?: boolean;
@@ -59,7 +60,7 @@ const PersonnelManagement = () => {
       showLeave: true,
       showSales: true,
       showAnnouncements: true,
-      showSurveys: true,
+      showCargo: true,
       showMovements: true,
       showOvertime: true,
       showOtherPersonnel: false
@@ -151,7 +152,7 @@ const PersonnelManagement = () => {
     setForm({ 
       first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '',
       module_visibility: {
-        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showSurveys: true, showMovements: true, showOvertime: true, showOtherPersonnel: false
+        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false
       }
     });
     setEditingId(null);
@@ -173,7 +174,7 @@ const PersonnelManagement = () => {
         showLeave: p.module_visibility?.showLeave ?? true,
         showSales: p.module_visibility?.showSales ?? true,
         showAnnouncements: p.module_visibility?.showAnnouncements ?? true,
-        showSurveys: p.module_visibility?.showSurveys ?? true,
+        showCargo: p.module_visibility?.showCargo ?? true,
         showMovements: p.module_visibility?.showMovements ?? true,
         showOvertime: p.module_visibility?.showOvertime ?? true,
         showOtherPersonnel: p.module_visibility?.showOtherPersonnel ?? false
@@ -229,11 +230,31 @@ const PersonnelManagement = () => {
     );
   }
 
+  const exportToExcel = () => {
+    const exportData = personnel.map(p => ({
+      'Ad Soyad': `${p.first_name} ${p.last_name}`,
+      'TC No': p.tc_no,
+      'Sicil ID': p.employee_code || '-',
+      'Departman': p.department,
+      'Cinsiyet': p.gender || '-',
+      'Başlangıç': p.start_date ? format(new Date(p.start_date), 'dd.MM.yyyy') : '-',
+      'Bitiş': p.end_date ? format(new Date(p.end_date), 'dd.MM.yyyy') : '-',
+      'Durum': p.is_active ? 'Aktif' : 'Pasif'
+    }));
+    
+    const ws = utils.json_to_sheet(exportData);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, "Personeller");
+    writeFile(wb, "Personel_Listesi.xlsx");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-foreground">Personel Yönetimi</h2>
-        <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if (!o) handleCloseDialog(); }}>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportToExcel}><Download className="w-4 h-4 mr-2" /> Excel İndir</Button>
+          <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if (!o) handleCloseDialog(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="w-4 h-4 mr-2" /> Yeni Personel</Button>
           </DialogTrigger>
@@ -306,7 +327,7 @@ const PersonnelManagement = () => {
                     { key: 'showLeave', label: 'İzin' },
                     { key: 'showSales', label: 'Satış Hedefi' },
                     { key: 'showAnnouncements', label: 'Duyurular' },
-                    { key: 'showSurveys', label: 'Anketler' },
+                    { key: 'showCargo', label: 'Koli/Sevkiyat' },
                     { key: 'showMovements', label: 'Hareketler' },
                     { key: 'showOvertime', label: 'Fazla Mesai' },
                     { key: 'showOtherPersonnel', label: 'Diğer Personeli Görebilir' },
@@ -333,6 +354,7 @@ const PersonnelManagement = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Card className="glass-card">

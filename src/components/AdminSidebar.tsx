@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const menuItems = [
-  { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
+  { title: 'Kontrol Paneli', url: '/admin', icon: LayoutDashboard },
   { title: 'Personeller', url: '/admin/personnel', icon: Users },
   { title: 'Mola Takibi', url: '/admin/breaks', icon: Clock },
   { title: 'Hareketler', url: '/admin/movements', icon: Activity },
