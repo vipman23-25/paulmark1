@@ -54,7 +54,7 @@ const PersonnelManagement = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '',
+    first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '', is_active: true,
     module_visibility: {
       showBreak: true,
       showLeave: true,
@@ -150,7 +150,7 @@ const PersonnelManagement = () => {
   const handleCloseDialog = () => {
     setIsOpen(false);
     setForm({ 
-      first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '',
+      first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '', is_active: true,
       module_visibility: {
         showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false
       }
@@ -169,6 +169,7 @@ const PersonnelManagement = () => {
       start_date: p.start_date,
       end_date: p.end_date || '',
       password_hash: p.password_hash || '',
+      is_active: p.is_active,
       module_visibility: {
         showBreak: p.module_visibility?.showBreak ?? true,
         showLeave: p.module_visibility?.showLeave ?? true,
@@ -200,10 +201,10 @@ const PersonnelManagement = () => {
       gender: form.gender || null,
       department: form.department,
       start_date: form.start_date,
-      end_date: form.end_date || null,
+      end_date: form.is_active ? null : (form.end_date || new Date().toISOString().split('T')[0]),
       password_hash: form.password_hash,
       module_visibility: form.module_visibility,
-      is_active: editingId ? undefined : true, // Only set active status on insert
+      is_active: form.is_active,
     };
 
     if (editingId) {
@@ -315,7 +316,15 @@ const PersonnelManagement = () => {
                 </div>
                 <div>
                   <Label htmlFor="end_date">İşten Çıkış Tarihi</Label>
-                  <Input id="end_date" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+                  <Input id="end_date" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} disabled={form.is_active} />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Label className="text-sm font-bold block mb-2">Çalışma Durumu</Label>
+                <div className="flex items-center space-x-2 bg-muted/50 p-3 rounded-lg border">
+                  <Switch id="is_active" checked={form.is_active} onCheckedChange={(c) => setForm({...form, is_active: c})} />
+                  <Label htmlFor="is_active" className="cursor-pointer font-medium">{form.is_active ? 'Aktif (Çalışıyor)' : 'Pasif (İşten Ayrıldı)'}</Label>
                 </div>
               </div>
 

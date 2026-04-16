@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, MapPin, Zap, Package } from 'lucide-react';
+import { Clock, MapPin, Zap, Package, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from 'recharts';
@@ -17,13 +17,15 @@ const Dashboard = () => {
         { data: dayOffs },
         { data: overtimes },
         { data: shipments },
+        { data: settingsData }
       ] = await Promise.all([
         supabase.from('personnel').select('*'),
         supabase.from('break_records').select('*'),
         supabase.from('personnel_movements').select('*'),
         supabase.from('weekly_day_off').select('*'),
         supabase.from('overtime_records').select('*'),
-        supabase.from('cargo_shipments').select('*')
+        supabase.from('cargo_shipments').select('*'),
+        supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').maybeSingle()
       ]);
       return { 
         personnel: personnel || [], 
@@ -31,7 +33,8 @@ const Dashboard = () => {
         movements: movements || [], 
         dayOffs: dayOffs || [], 
         overtimes: overtimes || [],
-        shipments: shipments || []
+        shipments: shipments || [],
+        weeklySchedule: settingsData?.setting_value?.weeklySchedule || []
       };
     },
     refetchInterval: 30000
@@ -41,28 +44,172 @@ const Dashboard = () => {
     return <div className="p-8 text-center text-muted-foreground animate-pulse">Dashboard yükleniyor...</div>;
   }
 
-  const { personnel, breaks, movements, dayOffs, overtimes, shipments } = data;
+  const { personnel, breaks, movements, dayOffs, overtimes, shipments, weeklySchedule } = data;
   const activePersonnel = personnel.filter(p => p.is_active);
   const onBreakRecords = breaks.filter(b => b.break_end === null);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h2 className="text-2xl font-bold text-foreground">Kontrol Paneli</h2>
+    <div className="space-y-4 animate-fade-in">
+      <h2 className="text-2xl font-bold text-foreground mb-6">Kontrol Paneli</h2>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />
-        <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />
-      </div>
+      <TodayShiftCard weeklySchedule={weeklySchedule} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <MovementsCard movements={movements} personnel={activePersonnel} />
-        <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <CargoStatusCard shipments={shipments} />
-      </div>
+      <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />
+      <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />
+      <MovementsCard movements={movements} personnel={activePersonnel} />
+      <CargoStatusCard shipments={shipments} />
+      <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />
     </div>
+  );
+};
+
+const TodayShiftCard = ({ weeklySchedule }: any) => {
+  if (!weeklySchedule || weeklySchedule.length === 0) return null;
+
+  const daysTr = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  const todayName = daysTr[new Date().getDay()];
+
+  // structure: { "Erkek Reyonu": { "Sabah": [], "Akşam": [], "İzinli": [] } }
+    const shifts: Record<string, any> = {}; 
+
+    weeklySchedule.forEach((row: any) => {
+        const adSoyad = row['Ad Soyad']?.toString().trim();
+        if (!adSoyad || adSoyad === '----------------' || adSoyad === 'Personel Bulunamadı') return;
+        const reyon = row['Reyon']?.toString().trim() || 'Diğer';
+        const rawVal = (row[todayName] || '').toString().trim();
+
+        const isDepoRow = reyon.startsWith('Depo (') || reyon === '--- DEPO ÇALIŞMASI ---';
+        const isMutfakRow = reyon.startsWith('Mutfak (') || reyon === '--- MUTFAK ÇALIŞMASI ---';
+
+        if (!shifts[adSoyad]) {
+            shifts[adSoyad] = { 
+                reyon: reyon, 
+                shiftVal: '', 
+                hasDepo: false, 
+                hasMutfak: false,
+                category: 'Belirsiz'
+            };
+        }
+
+        if (!isDepoRow && !isMutfakRow) {
+            shifts[adSoyad].reyon = reyon;
+            if (rawVal) {
+                shifts[adSoyad].shiftVal = rawVal;
+                const upVal = rawVal.toUpperCase();
+                if (upVal.startsWith('S')) shifts[adSoyad].category = 'Sabah';
+                else if (upVal.startsWith('A')) shifts[adSoyad].category = 'Akşam';
+                else if (upVal.startsWith('İ') || upVal.startsWith('I')) shifts[adSoyad].category = 'İzinli';
+                else shifts[adSoyad].category = 'Diğer';
+                
+                if (rawVal.includes('+')) {
+                    if (rawVal.toLowerCase().includes('depo')) shifts[adSoyad].hasDepo = true;
+                    if (rawVal.toLowerCase().includes('mutfak')) shifts[adSoyad].hasMutfak = true;
+                }
+            }
+        } else if (isDepoRow) {
+            if (rawVal && rawVal !== '-') shifts[adSoyad].hasDepo = true;
+        } else if (isMutfakRow) {
+            if (rawVal && rawVal !== '-') shifts[adSoyad].hasMutfak = true;
+        }
+    });
+
+    const grouped: Record<string, Record<string, string[]>> = {};
+
+    Object.entries(shifts).forEach(([adSoyad, data]) => {
+        if (!data.shiftVal && !data.hasDepo && !data.hasMutfak) return;
+        let cat = data.category;
+        if (!data.shiftVal && (data.hasDepo || data.hasMutfak)) cat = 'Ek Görev (Sınıflandırılmamış Shift)';
+        if (cat === 'Belirsiz') return;
+
+        let extra = '';
+        if (data.hasMutfak && !data.shiftVal.toLowerCase().includes('mutfak')) extra += ' + Mutfak Temizliği';
+        if (data.hasDepo && !data.shiftVal.toLowerCase().includes('depo')) extra += ' + Depo Çalışması';
+        
+        if (data.shiftVal.includes('+')) {
+          const splitPos = data.shiftVal.indexOf('+');
+          const customExtra = data.shiftVal.substring(splitPos);
+          if (!customExtra.toLowerCase().includes('mutfak') && !customExtra.toLowerCase().includes('depo')) {
+             extra += ' ' + customExtra;
+          }
+        }
+
+        const finalReyon = data.reyon.replace('Depo (', '').replace('Mutfak (', '').replace(')', '');
+        if (!grouped[finalReyon]) grouped[finalReyon] = { 'Sabah': [], 'Akşam': [], 'İzinli': [] };
+        if (!grouped[finalReyon][cat]) grouped[finalReyon][cat] = [];
+        
+        grouped[finalReyon][cat].push(`${adSoyad}${extra}`);
+    });
+
+  return (
+    <Card className="glass-card border-primary/20 bg-card">
+      <CardHeader className="bg-primary/5 pb-3">
+        <CardTitle className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-primary" />
+          Bugünün Vardiya ve Görev Özeti ({todayName})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-4 space-y-6">
+        {Object.entries(grouped).map(([reyon, cats]) => (
+          <div key={reyon} className="border rounded-lg p-4 bg-background/50">
+            <h3 className="text-lg font-bold text-foreground mb-3 border-b pb-1">🛍️ {reyon}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* Sabah */}
+              {cats['Sabah'] && cats['Sabah'].length > 0 && (
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded border border-blue-100 dark:border-blue-900/30">
+                  <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-2">☀️ Sabah Vardiyası</h4>
+                  <ul className="text-sm space-y-1">
+                    {cats['Sabah'].map((p, i) => (
+                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Akşam */}
+              {cats['Akşam'] && cats['Akşam'].length > 0 && (
+                <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded border border-indigo-100 dark:border-indigo-900/30">
+                  <h4 className="font-semibold text-indigo-700 dark:text-indigo-400 mb-2">🌙 Akşam Vardiyası</h4>
+                  <ul className="text-sm space-y-1">
+                    {cats['Akşam'].map((p, i) => (
+                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* İzinli */}
+              {cats['İzinli'] && cats['İzinli'].length > 0 && (
+                <div className="bg-orange-50/50 dark:bg-orange-900/10 p-3 rounded border border-orange-100 dark:border-orange-900/30">
+                  <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-2">⛔ İzinli</h4>
+                  <ul className="text-sm space-y-1">
+                    {cats['İzinli'].map((p, i) => (
+                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Sadece Ek Görev (Shift Yok) */}
+              {cats['Ek Görev (Sınıflandırılmamış Shift)'] && cats['Ek Görev (Sınıflandırılmamış Shift)'].length > 0 && (
+                <div className="bg-muted p-3 rounded border border-border">
+                  <h4 className="font-semibold text-muted-foreground mb-2">📌 Ek Görevli</h4>
+                  <ul className="text-sm space-y-1">
+                    {cats['Ek Görev (Sınıflandırılmamış Shift)'].map((p, i) => (
+                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+            </div>
+          </div>
+        ))}
+        {Object.keys(grouped).length === 0 && (
+          <p className="text-muted-foreground text-center py-4">Bugüne ait kayıtlı vardiya/görev planı bulunmuyor.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

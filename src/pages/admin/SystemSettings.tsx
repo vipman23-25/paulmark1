@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Settings, Plus, Trash2, ImagePlus, X, Activity } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { read, utils, writeFile } from 'xlsx';
 
 export interface SystemSettings {
   breakLimitMinutes: number;
@@ -22,6 +23,7 @@ export interface SystemSettings {
     showMovements: boolean;
     showReminders: boolean;
   };
+  weeklySchedule?: any[];
 }
 
 const defaultSettings: SystemSettings = {
@@ -36,7 +38,8 @@ const defaultSettings: SystemSettings = {
     showSalesTargets: true,
     showMovements: true,
     showReminders: true,
-  }
+  },
+  weeklySchedule: []
 };
 
 const SystemSettingsView = () => {
@@ -152,6 +155,110 @@ const SystemSettingsView = () => {
     });
   };
 
+  const downloadExcelTemplate = async () => {
+    try {
+      toast.info('Şablon hazırlanıyor...', { duration: 2000 });
+      const { data: personnel, error } = await supabase
+        .from('personnel')
+        .select('*')
+        .eq('is_active', true);
+        
+      if (error) throw error;
+      
+      const getOrder = (p: any) => {
+         const d = (p.department || '').toLocaleLowerCase('tr-TR');
+         const fullName = `${(p.first_name || '').toLocaleLowerCase('tr-TR')} ${(p.last_name || '').toLocaleLowerCase('tr-TR')}`;
+         
+         if (fullName.includes('turgay dolu') || d.includes('müdür')) return 0;
+         if (d.includes('çocuk')) return 1;
+         if (d.includes('kadın') || d.includes('kadin')) return 2;
+         if (d.includes('erkek')) return 3;
+         if (d.includes('kasa') || d.includes('kasiyer')) return 100; // En alt sıra
+         return 99; // Diğer reyonlar
+      };
+      
+      const activeFiltered = (personnel || []).filter(p => {
+         const d = (p.department || '').toLocaleLowerCase('tr-TR');
+         return !d.includes('ortak satıcı') && !d.includes('tüm reyonlar') && !d.includes('ortak satici');
+      });
+      
+      const sortedPersonnel = activeFiltered.sort((a, b) => {
+         const orderA = getOrder(a);
+         const orderB = getOrder(b);
+         if (orderA !== orderB) return orderA - orderB;
+         return (`${a.first_name} ${a.last_name}`).localeCompare(`${b.first_name} ${b.last_name}`);
+      });
+      
+      const templateData = sortedPersonnel.length > 0 
+        ? sortedPersonnel.map(p => ({
+            'Reyon': p.department || 'Diğer',
+            'Ad Soyad': `${p.first_name} ${p.last_name}`,
+            'Pazartesi': '', 'Salı': '', 'Çarşamba': '', 'Perşembe': '', 'Cuma': '', 'Cumartesi': '', 'Pazar': ''
+          }))
+        : [
+            { 'Reyon': 'Örnek Reyon', 'Ad Soyad': 'Personel Bulunamadı', 'Pazartesi': 'S', 'Salı': 'A', 'Çarşamba': 'İ', 'Perşembe': 'S', 'Cuma': 'A', 'Cumartesi': 'S', 'Pazar': 'İ' }
+          ];
+
+      if (sortedPersonnel.length > 0) {
+        templateData.push({ 'Reyon': '--- DEPO ÇALIŞMASI ---', 'Ad Soyad': '----------------', 'Pazartesi': 'Pazartesi', 'Salı': 'Salı', 'Çarşamba': 'Çarşamba', 'Perşembe': 'Perşembe', 'Cuma': 'Cuma', 'Cumartesi': 'Cumartesi', 'Pazar': 'Pazar' });
+        sortedPersonnel.forEach(p => {
+          templateData.push({
+            'Reyon': `Depo (${p.department || 'Diğer'})`,
+            'Ad Soyad': `${p.first_name} ${p.last_name}`,
+            'Pazartesi': '', 'Salı': '', 'Çarşamba': '', 'Perşembe': '', 'Cuma': '', 'Cumartesi': '', 'Pazar': ''
+          });
+        });
+
+        templateData.push({ 'Reyon': '--- MUTFAK ÇALIŞMASI ---', 'Ad Soyad': '----------------', 'Pazartesi': 'Pazartesi', 'Salı': 'Salı', 'Çarşamba': 'Çarşamba', 'Perşembe': 'Perşembe', 'Cuma': 'Cuma', 'Cumartesi': 'Cumartesi', 'Pazar': 'Pazar' });
+        sortedPersonnel.forEach(p => {
+          templateData.push({
+            'Reyon': `Mutfak (${p.department || 'Diğer'})`,
+            'Ad Soyad': `${p.first_name} ${p.last_name}`,
+            'Pazartesi': '', 'Salı': '', 'Çarşamba': '', 'Perşembe': '', 'Cuma': '', 'Cumartesi': '', 'Pazar': ''
+          });
+        });
+      }
+
+      const ws = utils.json_to_sheet(templateData);
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Sablon");
+      writeFile(wb, "Vardiya_Sablon.xlsx");
+      toast.success('Şablon mevcut personel listenize göre oluşturuldu!');
+    } catch (err: any) {
+      toast.error('Şablon indirilemedi: ' + err.message);
+    }
+  };
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = utils.sheet_to_json(ws);
+          
+          const updated = { ...settings, weeklySchedule: data };
+          updateMutation.mutate(updated, {
+             onSuccess: () => toast.success('Excel vardiya çizelgesi sisteme kaydedildi!')
+          });
+        } catch(err:any) {
+           toast.error('Dosya okunamadı: ' + err.message);
+        }
+      };
+      reader.readAsBinaryString(file);
+    } catch (err: any) {
+      toast.error('Excel yükleme hatası: ' + err.message);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -222,6 +329,26 @@ const SystemSettingsView = () => {
               <Button onClick={handleUpdateBreakLimit} disabled={updateMutation.isPending}>
                 Kaydet
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle>Haftalık Vardiya / Görev Planı (Excel)</CardTitle>
+            <CardDescription>
+              Excel şablonunu indirip doldurarak sisteme yükleyin. S: Sabah, A: Akşam, İ: İzinli, +M: Mutfak, +D: Depo ("S+M", "A+D").
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Button variant="outline" className="w-full" onClick={downloadExcelTemplate}>
+                Örnek Şablonu İndir
+              </Button>
+              <div className="pt-2">
+                <Label htmlFor="excel_upload" className="font-semibold block mb-2">Doldurulmuş Excel'i Yükle</Label>
+                <Input type="file" id="excel_upload" accept=".xlsx, .xls" onChange={handleExcelUpload} />
+              </div>
             </div>
           </CardContent>
         </Card>
