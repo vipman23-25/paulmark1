@@ -1,0 +1,328 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Package, Plus, Trash2, Pencil, Calendar, Download } from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
+
+const CargoManagement = () => {
+  const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [form, setForm] = useState({
+    arrival_date: new Date().toISOString().split('T')[0],
+    total_boxes: 0,
+    counted_boxes: 0,
+    notes: ''
+  });
+
+  const { data: shipments, isLoading } = useQuery({
+    queryKey: ['cargo_shipments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cargo_shipments' as any)
+        .select('*')
+        .order('arrival_date', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: async (formData: any) => {
+      const isComplete = Number(formData.counted_boxes) >= Number(formData.total_boxes);
+      const payload = {
+        arrival_date: formData.arrival_date,
+        total_boxes: Number(formData.total_boxes),
+        counted_boxes: Number(formData.counted_boxes),
+        notes: formData.notes,
+        status: isComplete ? 'Tamamlandı' : 'Sayılıyor',
+        completion_date: isComplete ? new Date().toISOString() : null
+      };
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('cargo_shipments' as any)
+          .update(payload)
+          .eq('id', editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('cargo_shipments' as any)
+          .insert([payload]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cargo_shipments'] });
+      toast.success(editingId ? 'Sevkiyat güncellendi' : 'Sevkiyat eklendi');
+      setIsOpen(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error('İşlem başarısız: ' + error.message);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('cargo_shipments' as any)
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cargo_shipments'] });
+      toast.success('Sevkiyat silindi');
+    },
+    onError: (error: any) => {
+      toast.error('Silme işlemi başarısız: ' + error.message);
+    }
+  });
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm({
+      arrival_date: new Date().toISOString().split('T')[0],
+      total_boxes: 0,
+      counted_boxes: 0,
+      notes: ''
+    });
+  };
+
+  const handleEdit = (shipment: any) => {
+    setEditingId(shipment.id);
+    setForm({
+      arrival_date: shipment.arrival_date,
+      total_boxes: shipment.total_boxes,
+      counted_boxes: shipment.counted_boxes,
+      notes: shipment.notes || ''
+    });
+    setIsOpen(true);
+  };
+
+  const calculateStatusInfo = (total: number, counted: number) => {
+    if (counted >= total) return { text: 'Tamamlandı', color: 'bg-success/20 text-success' };
+    if (counted > 0) return { text: 'Sayılıyor', color: 'bg-warning/20 text-warning' };
+    return { text: 'Bekliyor', color: 'bg-muted text-muted-foreground' };
+  };
+
+  const handleExportExcel = () => {
+    if (!shipments || shipments.length === 0) {
+      toast.error('Dışa aktarılacak veri bulunamadı');
+      return;
+    }
+    
+    try {
+      const exportData = shipments.map(item => {
+        const remaining = Math.max(0, item.total_boxes - item.counted_boxes);
+        const status = calculateStatusInfo(item.total_boxes, item.counted_boxes);
+        
+        let diffDays = 0;
+        let speed = 0;
+        
+        if (item.completion_date && item.counted_boxes >= item.total_boxes) {
+          const diffTime = Math.abs(new Date(item.completion_date).getTime() - new Date(item.arrival_date).getTime());
+          diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+          speed = Math.round(item.total_boxes / diffDays);
+        }
+
+        return {
+          'Geliş Tarihi': format(new Date(item.arrival_date), 'dd.MM.yyyy', { locale: tr }),
+          'Toplam Koli': item.total_boxes,
+          'Sayılan Koli': item.counted_boxes,
+          'Kalan Koli': remaining,
+          'Durum': status.text,
+          'Bitiş Tarihi': item.completion_date ? format(new Date(item.completion_date), 'dd.MM.yyyy HH:mm', { locale: tr }) : '-',
+          'Geçen Süre (Gün)': item.completion_date && item.counted_boxes >= item.total_boxes ? diffDays : '-',
+          'Ortalama Hız (Koli/Gün)': item.completion_date && item.counted_boxes >= item.total_boxes ? speed : '-',
+          'Notlar/Açıklama': item.notes || '-'
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Koli_Sevkiyatlar");
+      XLSX.writeFile(wb, `Sevkiyat_Sayimlari_${format(new Date(), 'dd_MM_yyyy')}.xlsx`);
+      toast.success('Excel dosyası başarıyla indirildi');
+    } catch (e: any) {
+      toast.error('Excel oluşturulurken hata: ' + e.message);
+    }
+  };
+
+  if (isLoading) return <div className="p-8 text-center animate-pulse">Yükleniyor...</div>;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex justify-between items-center bg-card p-4 rounded-xl border">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Package className="w-6 h-6 text-primary" /> Koli / Sevkiyat Takibi
+        </h2>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={handleExportExcel} className="hidden sm:flex">
+            <Download className="w-4 h-4 mr-2" /> Excel'e Aktar
+          </Button>
+          <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary/90 hover:bg-primary"><Plus className="w-4 h-4 mr-2" /> Yeni Sevkiyat Ekle</Button>
+            </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingId ? 'Sevkiyatı Düzenle' : 'Yeni Sevkiyat Ekle'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Geliş Tarihi</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    type="date" 
+                    className="pl-9"
+                    value={form.arrival_date} 
+                    onChange={e => setForm({...form, arrival_date: e.target.value})} 
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Toplam Koli Adedi</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={form.total_boxes} 
+                    onChange={e => setForm({...form, total_boxes: parseInt(e.target.value) || 0})} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Sayılan Koli</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={form.counted_boxes} 
+                    onChange={e => setForm({...form, counted_boxes: parseInt(e.target.value) || 0})} 
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Açıklama / Notlar</Label>
+                <Input 
+                  placeholder="Araç plakası veya ek notlar..."
+                  value={form.notes} 
+                  onChange={e => setForm({...form, notes: e.target.value})} 
+                />
+              </div>
+
+              <Button 
+                className="w-full mt-4" 
+                onClick={() => upsertMutation.mutate(form)}
+                disabled={upsertMutation.isPending}
+              >
+                {upsertMutation.isPending ? 'Kaydediliyor...' : 'Kaydet'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        </div>
+      </div>
+
+      <Card className="glass-card">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tarih</TableHead>
+                <TableHead className="text-center">Toplam Koli</TableHead>
+                <TableHead className="text-center">Sayılan</TableHead>
+                <TableHead className="text-center">Kalan</TableHead>
+                <TableHead>Durum & İstatistik</TableHead>
+                <TableHead>Notlar</TableHead>
+                <TableHead className="text-right">İşlemler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shipments?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Kayıtlı sevkiyat bulunamadı.</TableCell>
+                </TableRow>
+              ) : (
+                shipments?.map((item: any) => {
+                  const remaining = Math.max(0, item.total_boxes - item.counted_boxes);
+                  const status = calculateStatusInfo(item.total_boxes, item.counted_boxes);
+                  
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">
+                        {format(new Date(item.arrival_date), 'dd MMMM yyyy', { locale: tr })}
+                      </TableCell>
+                      <TableCell className="text-center font-semibold">{item.total_boxes}</TableCell>
+                      <TableCell className="text-center text-primary font-semibold">{item.counted_boxes}</TableCell>
+                      <TableCell className="text-center text-destructive font-semibold">{remaining}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1 block">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${status.color} inline-block`}>
+                            {status.text}
+                          </span>
+                          {item.completion_date && item.counted_boxes >= item.total_boxes && (
+                            <div className="text-xs text-muted-foreground mt-2 border-t pt-1">
+                              <div><span className="font-semibold">Bitiş:</span> {format(new Date(item.completion_date), 'dd MMM HH:mm', { locale: tr })}</div>
+                              <div><span className="font-semibold">Süre:</span> {
+                                (() => {
+                                  // calculate days
+                                  const diffTime = Math.abs(new Date(item.completion_date).getTime() - new Date(item.arrival_date).getTime());
+                                  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+                                  return `${diffDays} Gün`;
+                                })()
+                              }</div>
+                              <div><span className="font-semibold">Hız:</span> {
+                                (() => {
+                                  const diffTime = Math.abs(new Date(item.completion_date).getTime() - new Date(item.arrival_date).getTime());
+                                  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+                                  return `${Math.round(item.total_boxes / diffDays)} koli/gün`;
+                                })()
+                              }</div>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{item.notes}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                          <Pencil className="w-4 h-4 text-blue-500" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          if (window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+                            deleteMutation.mutate(item.id);
+                          }
+                        }}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default CargoManagement;

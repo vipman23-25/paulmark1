@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Calendar, Trash2, RefreshCw, Plus, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,7 +19,7 @@ const DayOffView = () => {
   const queryClient = useQueryClient();
   const [selectedWeeklyIds, setSelectedWeeklyIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [form, setForm] = useState({ personnel_id: '', day_of_week: '' });
+  const [form, setForm] = useState({ personnel_id: '', day_of_week: '', description: '' });
 
   const { data: personnel = [], isLoading: pLoading } = useQuery({
     queryKey: ['active_personnel'],
@@ -40,9 +41,9 @@ const DayOffView = () => {
   });
 
   const upsertMutation = useMutation({
-    mutationFn: async ({ personnel_id, day_of_week }: { personnel_id: string, day_of_week: number }) => {
+    mutationFn: async ({ personnel_id, day_of_week, description }: { personnel_id: string, day_of_week: number, description?: string }) => {
       await supabase.from('weekly_day_off').delete().eq('personnel_id', personnel_id);
-      const { data, error } = await supabase.from('weekly_day_off').insert({ personnel_id, day_of_week }).select();
+      const { data, error } = await supabase.from('weekly_day_off').insert({ personnel_id, day_of_week, description }).select();
       if (error) throw error;
       return data;
     },
@@ -50,7 +51,7 @@ const DayOffView = () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
       toast.success('Haftalık izin atandı/güncellendi!');
       setIsOpen(false);
-      setForm({ personnel_id: '', day_of_week: '' });
+      setForm({ personnel_id: '', day_of_week: '', description: '' });
     },
     onError: (error: any) => toast.error('İşlem başarısız: ' + error.message)
   });
@@ -101,11 +102,11 @@ const DayOffView = () => {
       toast.error('Lütfen personel ve gün seçiniz');
       return;
     }
-    upsertMutation.mutate({ personnel_id: form.personnel_id, day_of_week: Number(form.day_of_week) });
+    upsertMutation.mutate({ personnel_id: form.personnel_id, day_of_week: Number(form.day_of_week), description: form.description });
   };
 
   const handleEdit = (p: any, dayOff: any) => {
-    setForm({ personnel_id: p.id, day_of_week: dayOff ? dayOff.day_of_week.toString() : '' });
+    setForm({ personnel_id: p.id, day_of_week: dayOff ? dayOff.day_of_week.toString() : '', description: dayOff?.description || '' });
     setIsOpen(true);
   };
 
@@ -127,7 +128,7 @@ const DayOffView = () => {
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Yenile">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if(!o) setForm({personnel_id:'', day_of_week:''}); }}>
+          <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if(!o) setForm({personnel_id:'', day_of_week:'', description:''}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2"/> Yeni İzin Ata / Değiştir</Button>
             </DialogTrigger>
@@ -155,6 +156,14 @@ const DayOffView = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>Açıklama (İsteğe bağlı)</Label>
+                  <Input 
+                    value={form.description} 
+                    onChange={(e) => setForm({...form, description: e.target.value})} 
+                    placeholder="İzin hakkında not..."
+                  />
                 </div>
                 <Button type="submit" className="w-full" disabled={upsertMutation.isPending}>
                   {upsertMutation.isPending ? 'Kaydediliyor...' : 'Kaydet'}
@@ -188,6 +197,7 @@ const DayOffView = () => {
                   <TableHead>Personel</TableHead>
                   <TableHead>Departman</TableHead>
                   <TableHead>İzin Günü</TableHead>
+                  <TableHead>Açıklama</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
@@ -214,6 +224,11 @@ const DayOffView = () => {
                           <Badge key={d.id} variant="secondary">{DAYS[d.day_of_week] || 'Bilinmiyor'}</Badge>
                         )) : <span className="text-muted-foreground">Seçilmemiş</span>}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                       {p.weeklyDayOffs.length > 0 && p.weeklyDayOffs[0].description ? (
+                          <span className="text-sm text-muted-foreground">{p.weeklyDayOffs[0].description}</span>
+                       ) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">

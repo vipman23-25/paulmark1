@@ -19,8 +19,6 @@ const ReminderManagement = () => {
     department_name: '',
     title: '',
     description: '',
-    reminder_date: format(new Date(), 'yyyy-MM-dd'),
-    reminder_time: '09:00',
     is_active: true,
   });
 
@@ -45,7 +43,8 @@ const ReminderManagement = () => {
             last_name
           )
         `)
-        .order('reminder_date', { ascending: true });
+        .order('is_active', { ascending: false })
+        .order('id', { ascending: false });
       if (error) {
         toast.error('Veri yükleme hatası: ' + error.message);
         throw error;
@@ -96,7 +95,7 @@ const ReminderManagement = () => {
   });
 
   const handleSubmit = () => {
-    if ((!formData.personnel_id && !formData.department_name) || !formData.title.trim() || !formData.reminder_date) {
+    if ((!formData.personnel_id && !formData.department_name) || !formData.title.trim()) {
       toast.error('Lütfen tüm zorunlu alanları doldurun');
       return;
     }
@@ -106,8 +105,6 @@ const ReminderManagement = () => {
       department_name: formData.department_name === 'all' ? 'Tümü' : (formData.department_name || null),
       title: formData.title,
       description: formData.description,
-      reminder_date: formData.reminder_date,
-      reminder_time: formData.reminder_time,
       is_active: formData.is_active,
     };
 
@@ -130,8 +127,6 @@ const ReminderManagement = () => {
       department_name: reminder.department_name === 'Tümü' ? 'all' : (reminder.department_name || ''),
       title: reminder.title,
       description: reminder.description || '',
-      reminder_date: reminder.reminder_date,
-      reminder_time: reminder.reminder_time || '09:00',
       is_active: reminder.is_active,
     });
     setEditingId(reminder.id);
@@ -144,8 +139,6 @@ const ReminderManagement = () => {
       department_name: '',
       title: '',
       description: '',
-      reminder_date: format(new Date(), 'yyyy-MM-dd'),
-      reminder_time: '09:00',
       is_active: true,
     });
     setEditingId(null);
@@ -229,26 +222,6 @@ const ReminderManagement = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-foreground">Tarih *</label>
-                <Input
-                  type="date"
-                  value={formData.reminder_date}
-                  onChange={(e) => setFormData({ ...formData, reminder_date: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-foreground">Saat</label>
-                <Input
-                  type="time"
-                  value={formData.reminder_time || ''}
-                  onChange={(e) => setFormData({ ...formData, reminder_time: e.target.value })}
-                />
-              </div>
-            </div>
-
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -302,10 +275,6 @@ const ReminderManagement = () => {
                     {reminder.description && (
                       <p className="text-sm text-muted-foreground mb-2">{reminder.description}</p>
                     )}
-                    <div className="flex gap-3 text-sm font-medium text-muted-foreground">
-                      <span>📅 {format(new Date(reminder.reminder_date), 'dd MMMM yyyy', { locale: tr })}</span>
-                      {reminder.reminder_time && <span>🕐 {reminder.reminder_time}</span>}
-                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button

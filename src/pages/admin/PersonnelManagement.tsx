@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
 
 interface Personnel {
   id: string;
@@ -24,6 +25,17 @@ interface Personnel {
   password_hash: string;
   user_id?: string | null;
   employee_code?: string | null;
+  gender?: string | null;
+  module_visibility?: {
+    showBreak?: boolean;
+    showLeave?: boolean;
+    showSales?: boolean;
+    showAnnouncements?: boolean;
+    showSurveys?: boolean;
+    showMovements?: boolean;
+    showOvertime?: boolean;
+    showOtherPersonnel?: boolean;
+  };
 }
 
 const calculateWorkDuration = (startDate: string) => {
@@ -41,7 +53,17 @@ const PersonnelManagement = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    first_name: '', last_name: '', tc_no: '', employee_code: '', department: '', start_date: '', end_date: '', password_hash: ''
+    first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '',
+    module_visibility: {
+      showBreak: true,
+      showLeave: true,
+      showSales: true,
+      showAnnouncements: true,
+      showSurveys: true,
+      showMovements: true,
+      showOvertime: true,
+      showOtherPersonnel: false
+    }
   });
 
   // Fetch Personnel from Supabase
@@ -126,7 +148,12 @@ const PersonnelManagement = () => {
 
   const handleCloseDialog = () => {
     setIsOpen(false);
-    setForm({ first_name: '', last_name: '', tc_no: '', employee_code: '', department: '', start_date: '', end_date: '', password_hash: '' });
+    setForm({ 
+      first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '',
+      module_visibility: {
+        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showSurveys: true, showMovements: true, showOvertime: true, showOtherPersonnel: false
+      }
+    });
     setEditingId(null);
   };
 
@@ -136,10 +163,21 @@ const PersonnelManagement = () => {
       last_name: p.last_name,
       tc_no: p.tc_no,
       employee_code: p.employee_code || '',
+      gender: p.gender || '',
       department: p.department,
       start_date: p.start_date,
       end_date: p.end_date || '',
       password_hash: p.password_hash || '',
+      module_visibility: {
+        showBreak: p.module_visibility?.showBreak ?? true,
+        showLeave: p.module_visibility?.showLeave ?? true,
+        showSales: p.module_visibility?.showSales ?? true,
+        showAnnouncements: p.module_visibility?.showAnnouncements ?? true,
+        showSurveys: p.module_visibility?.showSurveys ?? true,
+        showMovements: p.module_visibility?.showMovements ?? true,
+        showOvertime: p.module_visibility?.showOvertime ?? true,
+        showOtherPersonnel: p.module_visibility?.showOtherPersonnel ?? false
+      }
     });
     setEditingId(p.id);
     setIsOpen(true);
@@ -158,10 +196,12 @@ const PersonnelManagement = () => {
       last_name: form.last_name,
       tc_no: form.tc_no,
       employee_code: form.employee_code || null,
+      gender: form.gender || null,
       department: form.department,
       start_date: form.start_date,
       end_date: form.end_date || null,
       password_hash: form.password_hash,
+      module_visibility: form.module_visibility,
       is_active: editingId ? undefined : true, // Only set active status on insert
     };
 
@@ -208,42 +248,87 @@ const PersonnelManagement = () => {
                   <Input id="first_name" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
                 </div>
                 <div>
-                  <Label htmlFor="last_name">Soyadı</Label>
+                  <Label htmlFor="last_name">Soyad</Label>
                   <Input id="last_name" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
                 </div>
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="tc_no">Kullanıcı Adı (TC No)</Label>
-                  <Input id="tc_no" value={form.tc_no} onChange={(e) => setForm({ ...form, tc_no: e.target.value })} />
+                  <Label htmlFor="employee_code">TC Kimlik / Sicil No</Label>
+                  <Input id="employee_code" value={form.employee_code} onChange={(e) => setForm({ ...form, employee_code: e.target.value })} />
                 </div>
                 <div>
-                  <Label htmlFor="password_hash">Giriş Şifresi</Label>
-                  <Input id="password_hash" type="text" className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800" value={form.password_hash} onChange={(e) => setForm({ ...form, password_hash: e.target.value })} placeholder="Sisteme giriş şifresi" />
+                  <Label>Cinsiyet</Label>
+                  <select 
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                  >
+                    <option value="">Seçiniz</option>
+                    <option value="Erkek">Erkek</option>
+                    <option value="Kadın">Kadın</option>
+                  </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="department">Departman</Label>
-                  <Input id="department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="employee_code">Personel ID / Sicil No</Label>
-                  <Input id="employee_code" placeholder="Mecburi değil" value={form.employee_code} onChange={(e) => setForm({ ...form, employee_code: e.target.value })} />
-                </div>
+
+              <div>
+                <Label htmlFor="tc_no">Kullanıcı Adı (Giriş için)</Label>
+                <Input id="tc_no" value={form.tc_no} onChange={(e) => setForm({ ...form, tc_no: e.target.value })} />
               </div>
+
+              <div>
+                <Label htmlFor="department">Reyon/Departman</Label>
+                <Input id="department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Örn: ERKEK" />
+              </div>
+
+              <div>
+                <Label htmlFor="password_hash">Şifre</Label>
+                <Input id="password_hash" type="text" className="bg-muted/30 font-medium" value={form.password_hash} onChange={(e) => setForm({ ...form, password_hash: e.target.value })} placeholder="****" />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="start_date">Başlangıç Tarihi</Label>
+                  <Label htmlFor="start_date">İşe Giriş Tarihi</Label>
                   <Input id="start_date" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
                 </div>
                 <div>
-                  <Label htmlFor="end_date">Bitiş Tarihi</Label>
-                  <Input id="end_date" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} placeholder="İsteğe bağlı" />
+                  <Label htmlFor="end_date">İşten Çıkış Tarihi</Label>
+                  <Input id="end_date" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
                 </div>
               </div>
-              <Button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="w-full">
-                {addMutation.isPending || updateMutation.isPending ? 'İşleniyor...' : (editingId ? 'Güncelle' : 'Ekle')}
+
+              <div className="pt-4 mt-2 border-t">
+                <Label className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-4 block">Modül Görünürlüğü</Label>
+                <div className="space-y-3 px-1">
+                  {[
+                    { key: 'showBreak', label: 'Mola Takibi' },
+                    { key: 'showLeave', label: 'İzin' },
+                    { key: 'showSales', label: 'Satış Hedefi' },
+                    { key: 'showAnnouncements', label: 'Duyurular' },
+                    { key: 'showSurveys', label: 'Anketler' },
+                    { key: 'showMovements', label: 'Hareketler' },
+                    { key: 'showOvertime', label: 'Fazla Mesai' },
+                    { key: 'showOtherPersonnel', label: 'Diğer Personeli Görebilir' },
+                  ].map((module) => (
+                    <div key={module.key} className="flex items-center justify-between">
+                      <Label htmlFor={module.key} className="text-sm font-medium leading-none cursor-pointer">
+                        {module.label}
+                      </Label>
+                      <Switch
+                        id={module.key}
+                        checked={form.module_visibility[module.key as keyof typeof form.module_visibility]}
+                        onCheckedChange={(checked) => 
+                          setForm({ ...form, module_visibility: { ...form.module_visibility, [module.key]: checked } })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-4">
+                {addMutation.isPending || updateMutation.isPending ? 'İşleniyor...' : 'Güncelle'}
               </Button>
             </form>
           </DialogContent>

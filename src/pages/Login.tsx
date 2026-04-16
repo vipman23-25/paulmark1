@@ -32,9 +32,9 @@ const Login = () => {
           .maybeSingle();
 
         if (foundPersonnel) {
-          setMockUser({ 
-            isAdmin: false, 
-            email: foundPersonnel.tc_no, 
+          setMockUser({
+            isAdmin: false,
+            email: foundPersonnel.tc_no,
             id: foundPersonnel.id,
             name: `${foundPersonnel.first_name} ${foundPersonnel.last_name}`
           });
@@ -51,7 +51,7 @@ const Login = () => {
           .maybeSingle();
 
         let isValidAdmin = false;
-        
+
         if (!adminSettings) {
           if (username === 'admin' && password === 'admin') {
             isValidAdmin = true;
@@ -105,11 +105,10 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => setUserType('personnel')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-                  userType === 'personnel'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${userType === 'personnel'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}
               >
                 <Users className="w-4 h-4 inline mr-2" />
                 Personel
@@ -117,11 +116,10 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => setUserType('admin')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
-                  userType === 'admin'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${userType === 'admin'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}
               >
                 <Shield className="w-4 h-4 inline mr-2" />
                 Müdür

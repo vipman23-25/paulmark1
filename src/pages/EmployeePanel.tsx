@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, CalendarDays, Umbrella, Coffee, ImagePlus, UserCheck, Timer, Calendar, Info, Clock, Activity, Target, LogOut, Bell } from "lucide-react";
+import { Label } from '@/components/ui/label';
+import { MapPin, CalendarDays, Umbrella, Coffee, ImagePlus, UserCheck, Timer, Calendar, Info, Clock, Activity, Target, LogOut, Bell, Package, Plus, Minus } from "lucide-react";
 import { format } from 'date-fns';
 
 const DAYS = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
@@ -41,6 +42,7 @@ const EmployeePanel = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [dayOffDescription, setDayOffDescription] = useState('');
 
   useEffect(() => {
     if (!user) navigate('/login');
@@ -65,13 +67,26 @@ const EmployeePanel = () => {
   });
   const breakLimit = Number(generalSettings?.breakLimitMinutes || 60);
   const announcementImages = generalSettings?.announcementImages || [];
-  const features = generalSettings?.employeeDashboardFeatures || {
+  const baseFeatures = generalSettings?.employeeDashboardFeatures || {
     showOvertime: true,
     showBreakViolations: true,
     showLeaveStatus: true,
     showSalesTargets: true,
     showMovements: true,
     showReminders: true,
+  };
+
+  const pVis = (personnel as any)?.module_visibility || {};
+  
+  const features = {
+    showBreak: pVis.showBreak ?? true,
+    showOvertime: pVis.showOvertime ?? baseFeatures.showOvertime,
+    showBreakViolations: pVis.showBreak ?? baseFeatures.showBreakViolations,
+    showLeaveStatus: pVis.showLeave ?? baseFeatures.showLeaveStatus,
+    showSalesTargets: pVis.showSales ?? baseFeatures.showSalesTargets,
+    showMovements: pVis.showMovements ?? baseFeatures.showMovements,
+    showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
+    showCargoStatus: true, // Şimdilik tüm personele açık
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({
@@ -85,14 +100,16 @@ const EmployeePanel = () => {
         { data: overtimes },
         { data: movements },
         { data: reminders },
-        { data: allDepartmentSalesTargets }
+        { data: allDepartmentSalesTargets },
+        { data: shipments }
       ] = await Promise.all([
         supabase.from('weekly_day_off').select('*').eq('personnel_id', personnel.id),
         supabase.from('break_records').select('*').eq('personnel_id', personnel.id),
         supabase.from('overtime_records').select('*').eq('personnel_id', personnel.id),
         supabase.from('personnel_movements').select('*').eq('personnel_id', personnel.id).order('start_date', { ascending: false }),
         (supabase.from('reminders').select('*').eq('is_active', true).order('reminder_date', { ascending: true }) as any),
-        (supabase.from('sales_targets' as any).select('*, personnel!inner(department)').eq('personnel.department', personnel.department || 'Bilinmiyor').eq('target_month', currentMonth) as any)
+        (supabase.from('sales_targets' as any).select('*, personnel!inner(department)').eq('personnel.department', personnel.department || 'Bilinmiyor').eq('target_month', currentMonth) as any),
+        supabase.from('cargo_shipments' as any).select('*').order('arrival_date', { ascending: true })
       ]);
       
       const safeReminders = (reminders || []).filter((r: any) => 
@@ -113,21 +130,65 @@ const EmployeePanel = () => {
         reminders: safeReminders || [],
         salesTarget,
         deptTargetQuota,
-        deptRealizedSales
+        deptRealizedSales,
+        shipments: shipments || []
       };
     },
     enabled: !!personnel?.id,
     refetchInterval: 30000
   });
 
+  const updateCargoMutation = useMutation({
+    mutationFn: async ({ id, newCount, totalBoxes, notes }: { id: string, newCount: number, totalBoxes: number, notes?: string }) => {
+      const isComplete = newCount >= totalBoxes;
+      
+      const payload: any = { 
+        counted_boxes: newCount, 
+        status: isComplete ? 'Tamamlandı' : 'Sayılıyor',
+        completion_date: isComplete ? new Date().toISOString() : null
+      };
+
+      if (notes !== undefined) {
+        payload.notes = notes;
+      }
+
+      const { error } = await supabase
+        .from('cargo_shipments' as any)
+        .update(payload)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
+      toast.success('Koli sayımı güncellendi');
+    },
+    onError: (error: any) => {
+      toast.error('Koli güncellenemedi: ' + error.message);
+    }
+  });
+
+  const updateCargoComplete = useMutation({
+    mutationFn: async ({ id, isComplete }: { id: string, isComplete: boolean }) => {
+      const { error } = await supabase
+        .from('cargo_shipments' as any)
+        .update({ status: isComplete ? 'Tamamlandı' : 'Sayılıyor' })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
+      toast.success('Sevkiyat durumu güncellendi');
+    }
+  });
+
   const toggleDayMutation = useMutation({
-    mutationFn: async ({ day, isSelected, allIds }: { day: number, isSelected: boolean, allIds: string[] }) => {
+    mutationFn: async ({ day, isSelected, allIds, description }: { day: number, isSelected: boolean, allIds: string[], description?: string }) => {
       if (allIds.length > 0) {
         const { error: delErr } = await supabase.from('weekly_day_off').delete().in('id', allIds);
         if (delErr) throw delErr;
       }
       if (!isSelected) {
-        const { error: insErr } = await supabase.from('weekly_day_off').insert({ personnel_id: personnel.id, day_of_week: day });
+        const { error: insErr } = await supabase.from('weekly_day_off').insert({ personnel_id: personnel.id, day_of_week: day, description });
         if (insErr) throw insErr;
         return { deleted: false };
       }
@@ -173,6 +234,12 @@ const EmployeePanel = () => {
       toast.error('Çıkış yapılamadı');
     }
   };
+
+  useEffect(() => {
+    if (dashboardData?.weeklyDayOffs && dashboardData.weeklyDayOffs.length > 0) {
+      setDayOffDescription(dashboardData.weeklyDayOffs[0].description || '');
+    }
+  }, [dashboardData?.weeklyDayOffs]);
 
   if (loadingPersonnel || loadingData) {
     return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
@@ -235,7 +302,7 @@ const EmployeePanel = () => {
   const toggleDay = (day: number) => {
     const isSelected = safeWeeklyDayOffs.some((d: any) => d.day_of_week === day);
     const allIds = safeWeeklyDayOffs.map((r: any) => r.id);
-    toggleDayMutation.mutate({ day, isSelected, allIds });
+    toggleDayMutation.mutate({ day, isSelected, allIds, description: dayOffDescription });
   };
 
   const { months, days } = calculateWorkDuration(personnel.start_date);
@@ -255,6 +322,7 @@ const EmployeePanel = () => {
         </div>
 
         {/* Break Section */}
+        {features.showBreak && (
         <Card className="glass-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Coffee className="h-5 w-5" /> Mola</CardTitle>
@@ -290,6 +358,7 @@ const EmployeePanel = () => {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Dashboards */}
         {(features.showOvertime || features.showBreakViolations || features.showLeaveStatus || features.showSalesTargets || features.showMovements || features.showReminders) && (
@@ -453,6 +522,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Day Off Selection */}
+        {features.showLeaveStatus && (
         <Card className="glass-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Haftalık İzin Günü</CardTitle>
@@ -462,28 +532,152 @@ const EmployeePanel = () => {
                 : 'İzin kullanmak istediğiniz günü seçin'}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {DAYS.slice(1, 6).map((day, idx) => {
-                const i = idx + 1;
-                const isSelected = selectedDays.includes(i);
-                const isDisabled = toggleDayMutation.isPending;
-                
-                return (
-                  <Button 
-                    key={i} 
-                    variant={isSelected ? 'default' : 'outline'} 
-                    onClick={() => toggleDay(i)} 
-                    disabled={isDisabled} 
-                    className={`w-full ${isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
-                  >
-                    {day}
-                  </Button>
-                );
-              })}
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Input 
+                  placeholder="İzin talebinizle ilgili kısa bir not ekleyebilirsiniz (İsteğe bağlı)..." 
+                  value={dayOffDescription} 
+                  onChange={(e) => setDayOffDescription(e.target.value)}
+                  className="max-w-md bg-muted/50"
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {DAYS.slice(1, 6).map((day, idx) => {
+                  const i = idx + 1;
+                  const isSelected = selectedDays.includes(i);
+                  const isDisabled = toggleDayMutation.isPending;
+                  
+                  return (
+                    <Button 
+                      key={i} 
+                      variant={isSelected ? 'default' : 'outline'} 
+                      onClick={() => toggleDay(i)} 
+                      disabled={isDisabled} 
+                      className={`w-full ${isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
+                    >
+                      {day}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
+        )}
+
+        {/* Cargo Shipments Tracking Section */}
+        {features.showCargoStatus && dashboardData?.shipments && dashboardData.shipments.filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor').length > 0 && (
+          <Card className="glass-card mt-6">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-xl font-bold flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> Koli / Sevkiyat Takibi</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 px-3 sm:px-6">
+              <div className="flex flex-col gap-4">
+                {dashboardData.shipments
+                  .filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor')
+                  .sort((a: any, b: any) => new Date(a.arrival_date).getTime() - new Date(b.arrival_date).getTime())
+                  .map((shipment: any) => {
+                    const remaining = Math.max(0, shipment.total_boxes - shipment.counted_boxes);
+                    const progress = shipment.total_boxes > 0 ? (shipment.counted_boxes / shipment.total_boxes) * 100 : 0;
+                    const isComplete = shipment.counted_boxes >= shipment.total_boxes;
+
+                    return (
+                      <div key={shipment.id} className={`p-5 rounded-xl border-2 transition-all ${isComplete ? 'bg-success/5 border-success/30' : 'bg-card border-border hover:border-primary/30'} flex flex-col md:flex-row gap-6 shadow-sm items-center`}>
+                        
+                        {/* Title & Notes section (Left) */}
+                        <div className="flex-1 w-full">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold text-lg">{format(new Date(shipment.arrival_date), 'dd.MM.yyyy')} Sevkiyatı</h3>
+                            <Badge variant={isComplete ? "default" : "outline"} className={isComplete ? "bg-success" : ""}>
+                              {isComplete ? 'Tamamlandı' : 'Bekliyor'}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            <Label className="text-[11px] font-semibold uppercase text-muted-foreground ml-1">Açıklama / Not Ekleyin</Label>
+                            <Input 
+                              defaultValue={shipment.notes || ''}
+                              placeholder="Eksik, hasarlı koli tespiti veya ek notlar..."
+                              className="h-10 text-sm bg-muted/30"
+                              onBlur={(e) => {
+                                if (e.target.value !== (shipment.notes || '')) {
+                                  updateCargoMutation.mutate({ 
+                                    id: shipment.id, 
+                                    newCount: shipment.counted_boxes, 
+                                    totalBoxes: shipment.total_boxes, 
+                                    notes: e.target.value 
+                                  });
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Numbers and Progress (Middle) */}
+                        <div className="flex-1 w-full flex flex-col justify-center">
+                          <div className="grid grid-cols-3 gap-1 sm:gap-2 mb-3 text-center">
+                            <div className="bg-muted rounded-lg p-1.5 sm:p-2 flex flex-col justify-center overflow-hidden">
+                              <p className="text-[10px] w-full text-muted-foreground mb-1 uppercase font-bold truncate tracking-tighter">Top.</p>
+                              <p className="text-lg sm:text-xl font-bold">{shipment.total_boxes}</p>
+                            </div>
+                            <div className="bg-primary/10 rounded-lg p-1.5 sm:p-2 border border-primary/20 flex flex-col justify-center overflow-hidden">
+                              <p className="text-[10px] w-full text-primary mb-1 uppercase font-bold truncate tracking-tighter">Say.</p>
+                              <p className="text-lg sm:text-xl font-bold text-primary">{shipment.counted_boxes}</p>
+                            </div>
+                            <div className="bg-destructive/10 rounded-lg p-1.5 sm:p-2 border border-destructive/20 shadow-sm flex flex-col justify-center overflow-hidden">
+                              <p className="text-[10px] w-full text-destructive mb-1 uppercase font-bold truncate tracking-tighter">Son</p>
+                              <p className="text-xl sm:text-2xl font-bold text-destructive animate-pulse">{remaining}</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-medium">
+                              <span>İlerleme Oranı</span>
+                              <span>{Math.round(progress)}%</span>
+                            </div>
+                            <Progress value={progress} className="h-2 w-full bg-secondary" indicatorColor={isComplete ? "bg-success" : "bg-primary"} />
+                          </div>
+                        </div>
+
+                        {/* Actions (Right) */}
+                        <div className="w-full md:max-w-[220px] flex items-center justify-between gap-3">
+                          <Button 
+                            variant="destructive" 
+                            size="icon"
+                            className="h-14 w-14 shrink-0 rounded-xl"
+                            onClick={() => {
+                              if (shipment.counted_boxes > 0) {
+                                updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes - 1, totalBoxes: shipment.total_boxes });
+                              }
+                            }}
+                            disabled={shipment.counted_boxes === 0 || updateCargoMutation.isPending}
+                          >
+                            <Minus className="h-6 w-6" />
+                          </Button>
+                          <div className="flex-1 text-center text-[10px] uppercase font-bold text-muted-foreground">
+                            Sayımı<br/>Güncelle
+                          </div>
+                          <Button 
+                            variant="default" 
+                            size="icon"
+                            className="h-14 w-14 shrink-0 rounded-xl"
+                            onClick={() => {
+                              updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes + 1, totalBoxes: shipment.total_boxes });
+                            }}
+                            disabled={updateCargoMutation.isPending}
+                          >
+                            <Plus className="h-6 w-6" />
+                          </Button>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Announcement Images Section */}
         {Array.isArray(announcementImages) && announcementImages.length > 0 && (
           <div className="space-y-4 mt-8 pt-4 border-t">

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Clock, MapPin, Calendar, Zap, Umbrella } from 'lucide-react';
+import { Users, Clock, MapPin, Calendar, Zap, Package } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from 'recharts';
@@ -16,19 +16,22 @@ const Dashboard = () => {
         { data: movements },
         { data: dayOffs },
         { data: overtimes },
+        { data: shipments },
       ] = await Promise.all([
         supabase.from('personnel').select('*'),
         supabase.from('break_records').select('*'),
         supabase.from('personnel_movements').select('*'),
         supabase.from('weekly_day_off').select('*'),
-        supabase.from('overtime_records').select('*')
+        supabase.from('overtime_records').select('*'),
+        supabase.from('cargo_shipments').select('*')
       ]);
       return { 
         personnel: personnel || [], 
         breaks: breaks || [], 
         movements: movements || [], 
         dayOffs: dayOffs || [], 
-        overtimes: overtimes || [] 
+        overtimes: overtimes || [],
+        shipments: shipments || []
       };
     },
     refetchInterval: 30000
@@ -38,7 +41,7 @@ const Dashboard = () => {
     return <div className="p-8 text-center text-muted-foreground animate-pulse">Dashboard yükleniyor...</div>;
   }
 
-  const { personnel, breaks, movements, dayOffs, overtimes } = data;
+  const { personnel, breaks, movements, dayOffs, overtimes, shipments } = data;
   const activePersonnel = personnel.filter(p => p.is_active);
   const onBreakRecords = breaks.filter(b => b.break_end === null);
 
@@ -53,11 +56,11 @@ const Dashboard = () => {
 
   const cards = [
     { title: 'Toplam Personel', value: stats.total, icon: Users, color: 'text-primary', bg: 'bg-primary/5' },
-    { title: 'Aktif Personel', value: stats.active, icon: Users, color: 'text-success', bg: 'bg-success/5' },
     { title: 'Molada', value: stats.onBreak, icon: Clock, color: 'text-info', bg: 'bg-info/5' },
     { title: 'Hareketler', value: stats.movements, icon: MapPin, color: 'text-warning', bg: 'bg-warning/5' },
     { title: 'İzin Günleri', value: stats.dayOffs, icon: Calendar, color: 'text-secondary', bg: 'bg-secondary/5' },
     { title: 'Fazla Mesai', value: stats.overtimes, icon: Zap, color: 'text-destructive', bg: 'bg-destructive/5' },
+    { title: 'Bekleyen Koli', value: shipments.filter((s: any) => s.total_boxes > s.counted_boxes).length, icon: Package, color: 'text-warning', bg: 'bg-warning/5' },
   ];
 
   return (
@@ -79,66 +82,126 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ActivePersonnelCard personnel={activePersonnel} />
+        <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />
         <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <MovementsCard movements={movements} personnel={activePersonnel} />
-        <AnnualLeaveCard personnel={activePersonnel} movements={movements} />
+        <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <CargoStatusCard shipments={shipments} />
       </div>
     </div>
   );
 };
 
-const ActivePersonnelCard = ({ personnel }: any) => {
-  const calculateWorkDuration = (startDate: string) => {
-    const start = new Date(startDate);
-    const now = new Date();
-    const diffMs = now.getTime() - start.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const months = Math.floor(diffDays / 30);
-    const days = diffDays % 30;
-    return { months, days };
+const CargoStatusCard = ({ shipments }: any) => {
+  const activeShipments = shipments
+    .filter((s: any) => s.total_boxes > s.counted_boxes)
+    .sort((a: any, b: any) => new Date(a.arrival_date).getTime() - new Date(b.arrival_date).getTime());
+
+  return (
+    <Card className="glass-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Package className="h-5 w-5" />
+          Aktif Tır / Koli Sevkiyat Durumu
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {activeShipments.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Bekleyen aktif kargo/koli sevkiyatı yok</p>
+          ) : (
+            activeShipments.map((s: any) => {
+              const remaining = Math.max(0, s.total_boxes - s.counted_boxes);
+              const progress = s.total_boxes > 0 ? (s.counted_boxes / s.total_boxes) * 100 : 0;
+              return (
+                <div key={s.id} className="p-3 rounded-lg border bg-muted/20">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="font-medium text-sm">{format(new Date(s.arrival_date), 'dd.MM.yyyy')} Sevkiyatı</p>
+                    <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded">Kalan: {remaining}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Toplam: {s.total_boxes}</span>
+                    <span>Sayılan: {s.counted_boxes}</span>
+                  </div>
+                  <div className="w-full bg-secondary/20 h-2 rounded-full overflow-hidden">
+                    <div className="bg-primary h-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                  </div>
+                  {s.notes && <p className="text-xs text-muted-foreground mt-2 italic">{s.notes}</p>}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const OvertimeReceivablesCard = ({ overtimes, personnel }: any) => {
+  const getPersonnelName = (id: string, withDept=false) => {
+    const p = personnel.find((p: any) => p.id === id);
+    if (!p) return 'Bilinmiyor';
+    return withDept ? `${p.first_name} ${p.last_name} (${p.department})` : `${p.first_name} ${p.last_name}`;
+  };
+
+  const balances: Record<string, number> = {};
+  overtimes.forEach((o: any) => {
+    const isEarning = !(o.record_type || '').toLowerCase().includes('kullanım') && !(o.record_type || '').toLowerCase().includes('alacak');
+    // wait, earned includes normal overtimes. Used is 'kullanım'. Let's look closely at EmployeePanel usage:
+    // earned: not ('alacak' or 'kullanım') => actually in employee panel: earned = !(alacak or kullanım). Then 'alacak' and 'kullanım' are used credit.
+    // wait, let's just make sure "isEarning": if It's "Kullanılan", it's negative.
+    const isUsed = (o.record_type || '').toLowerCase().includes('kullanım') || (o.record_type || '').toLowerCase().includes('alacak');
+    const h = Number(o.hours || 0);
+    if (!balances[o.personnel_id]) balances[o.personnel_id] = 0;
+    balances[o.personnel_id] += isUsed ? -h : h;
+  });
+
+  const receivables = Object.entries(balances)
+    .filter(([_, bal]) => bal > 0)
+    .sort((a, b) => b[1] - a[1]) // highest first
+    .slice(0, 10);
+
+  const formatDuration = (totalH: number) => {
+    const d = Math.floor(totalH / 8);
+    const remH = totalH - (d * 8);
+    const h = Math.floor(remH);
+    const m = Math.round((remH - h) * 60);
+    let parts = [];
+    if (d > 0) parts.push(`${d} G`);
+    if (h > 0) parts.push(`${h} S`);
+    if (m > 0) parts.push(`${m} Dk`);
+    return parts.length > 0 ? parts.join(' ') : '0';
   };
 
   return (
     <Card className="glass-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Aktif Personel
+          <Zap className="h-5 w-5" />
+          Fazla Mesai Alacak Listesi (İlk 10)
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2 max-h-80 overflow-y-auto">
-          {personnel.length === 0 ? (
-            <p className="text-muted-foreground">Henüz personel eklenmemiş</p>
+          {receivables.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Alacaklı personel bulunmuyor</p>
           ) : (
-            personnel.slice(0, 10).map((p: any) => {
-              const { months, days } = calculateWorkDuration(p.start_date);
-              return (
-                <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center text-white text-sm font-semibold">
-                      {p.first_name.charAt(0)}{p.last_name.charAt(0)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{p.first_name} {p.last_name}</p>
-                      <div className="flex gap-2 text-xs text-muted-foreground">
-                        <span>{p.department}</span>
-                        <span>•</span>
-                        <span>{months}ay {days}g</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-xs px-2 py-1 rounded-full bg-success/20 text-success whitespace-nowrap">Aktif</div>
+            receivables.map(([pId, bal]) => (
+              <div key={pId} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 border">
+                <div>
+                  <p className="font-medium text-sm">{getPersonnelName(pId, true)}</p>
                 </div>
-              );
-            })
-          )}
-          {personnel.length > 10 && (
-            <p className="text-xs text-muted-foreground text-center py-2">+{personnel.length - 10} daha</p>
+                <div className="text-xs font-semibold px-2 py-1 rounded bg-success/20 text-success">
+                  {formatDuration(bal)}
+                </div>
+              </div>
+            ))
           )}
         </div>
       </CardContent>
@@ -232,62 +295,54 @@ const MovementsCard = ({ movements, personnel }: any) => {
   );
 };
 
-const AnnualLeaveCard = ({ personnel, movements }: any) => {
-  const calculateEntitlement = (startDate: string) => {
-    const start = new Date(startDate);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - start.getTime());
-    const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
-    let total = 0;
-    for (let i = 1; i <= diffYears; i++) {
-      if (i <= 5) total += 14;
-      else if (i <= 15) total += 20;
-      else total += 26;
-    }
-    return total;
+const DailyBreaksCard = ({ breaks, personnel }: any) => {
+  const getPersonnelName = (id: string, dept=false) => {
+    const p = personnel.find((p: any) => p.id === id);
+    if (!p) return 'Bilinmiyor';
+    return dept ? `${p.first_name} ${p.last_name} (${p.department})` : `${p.first_name} ${p.last_name}`;
   };
-  
-  const leaveMovements = movements.filter((l: any) => l.movement_type.toLowerCase().includes('izin'));
-  
-  let entitlement = 0;
-  personnel.forEach((p: any) => entitlement += calculateEntitlement(p.start_date));
-  const used = leaveMovements.reduce((s: number, l: any) => s + Number(l.total_days), 0);
-  const remaining = Math.max(0, entitlement - used);
 
-  const data = [
-    { name: 'Kullanılan', value: used, color: '#f97316' }, 
-    { name: 'Kalan', value: remaining, color: '#22c55e' }, 
-  ];
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayBreaks = breaks.filter((b: any) => (b.break_start || '').startsWith(todayStr) && b.break_end !== null)
+    .sort((a: any, b: any) => new Date(b.break_start).getTime() - new Date(a.break_start).getTime());
 
+  const formatTime = (iso: string) => format(new Date(iso), 'HH:mm', { locale: tr });
+  
+  const limit = 60; // 60 minutes limit
+  
   return (
     <Card className="glass-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Umbrella className="h-5 w-5" />
-          Şirket Geneli Yıllık İzin Oranı
+          <Clock className="h-5 w-5" />
+          Bugün Tamamlanan ve İhlal Molaları
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {entitlement === 0 ? (
-          <p className="text-muted-foreground text-sm">Düzenli çalışan izin hakkedişi bulunamadı</p>
-        ) : (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={data} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                  {data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <ChartTooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex justify-center gap-4 mt-4">
-              <div className="flex items-center gap-2 text-sm"><div className="w-3 h-3 rounded-full bg-orange-500"></div> Kullanılan ({used} Gün)</div>
-              <div className="flex items-center gap-2 text-sm"><div className="w-3 h-3 rounded-full bg-green-500"></div> Kalan ({remaining} Gün)</div>
-            </div>
-          </div>
-        )}
+        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          {todayBreaks.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Bugün tamamlanan mola kaydı yok</p>
+          ) : (
+            todayBreaks.map((b: any) => {
+              const start = new Date(b.break_start);
+              const end = new Date(b.break_end);
+              const dur = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+              const isViolation = dur > limit;
+              
+              return (
+                <div key={b.id} className={`flex items-center justify-between p-2 rounded-lg border ${isViolation ? 'bg-destructive/10 border-destructive/30' : 'bg-muted/30 border-border/50'}`}>
+                  <div>
+                    <p className={`font-medium text-sm ${isViolation ? 'text-destructive font-semibold' : ''}`}>{getPersonnelName(b.personnel_id)}</p>
+                    <p className="text-xs text-muted-foreground">{formatTime(b.break_start)} - {formatTime(b.break_end)}</p>
+                  </div>
+                  <div className={`text-xs font-semibold px-2 py-1 rounded ${isViolation ? 'bg-destructive/20 text-destructive' : 'bg-secondary/10 text-secondary'}`}>
+                    {dur} dk {isViolation && ' (İhlal)'}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </CardContent>
     </Card>
   );
