@@ -1065,7 +1065,7 @@ const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any,
     const upVal = shiftRaw.toUpperCase();
     if (upVal.startsWith('S')) shiftType = 'Sabah';
     else if (upVal.startsWith('A')) shiftType = 'Akşam';
-    else if (upVal.startsWith('İ') || upVal.startsWith('I')) shiftType = 'İzinli';
+    else if (upVal.startsWith('İ') || upVal.startsWith('I') || upVal.includes('İZİN') || upVal.includes('IZIN')) shiftType = 'İzinli';
 
     if (shiftType === 'İzinli') {
       return {
@@ -1091,6 +1091,11 @@ const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any,
 
     let statusLabel = 'Mağazada';
     let statusColor = 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400';
+
+    if (shiftType !== 'Sabah' && shiftType !== 'Akşam') {
+      statusLabel = 'Mesai Dışı / Off';
+      statusColor = 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400';
+    }
 
     if (dateOffset === 0) {
       const activeBreak = dashboardData.colleagueBreaks?.find((b: any) => b.personnel_id === person.id && !b.break_end);
