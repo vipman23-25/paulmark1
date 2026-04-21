@@ -1022,4 +1022,168 @@ const DailyBreakTracker = ({ todayBreaks, activeBreak, limitMinutes }: { todayBr
   );
 };
 
+const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any, personnel: any }) => {
+  if (!dashboardData?.weeklySchedule || dashboardData.weeklySchedule.length === 0) return null;
+
+  const daysTr = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+  const getShiftStatus = (person: any, dateOffset: 0 | 1 = 0) => {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + dateOffset);
+    const targetStr = targetDate.toISOString().split('T')[0];
+    const dayName = daysTr[targetDate.getDay()];
+    const fullName = `${person.first_name} ${person.last_name}`.trim();
+
+    const activeMovement = dashboardData.colleagueMovements?.find((m: any) => {
+      if (m.personnel_id !== person.id) return false;
+      return m.start_date <= targetStr && m.end_date >= targetStr;
+    });
+
+    if (activeMovement) {
+      return {
+        title: activeMovement.movement_type || 'Raporlu/İzinli',
+        statusLabel: 'İzinli',
+        statusColor: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400'
+      };
+    }
+
+    const row = dashboardData.weeklySchedule.find((r: any) => r['Ad Soyad']?.toString().trim() === fullName);
+    let shiftRaw = row ? (row[dayName] || '').toString().trim() : '';
+
+    if (!shiftRaw || shiftRaw === '-') {
+      return {
+        title: 'İzinli (Off) / Belirsiz',
+        statusLabel: 'İzinli',
+        statusColor: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800'
+      };
+    }
+
+    let shiftType = '';
+    const upVal = shiftRaw.toUpperCase();
+    if (upVal.startsWith('S')) shiftType = 'Sabah';
+    else if (upVal.startsWith('A')) shiftType = 'Akşam';
+    else if (upVal.startsWith('İ') || upVal.startsWith('I')) shiftType = 'İzinli';
+
+    if (shiftType === 'İzinli') {
+      return {
+        title: 'Haftalık İzin',
+        statusLabel: 'İzinli',
+        statusColor: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400'
+      };
+    }
+
+    let title = shiftType === 'Sabah' ? 'Sabah Vardiyası' : shiftType === 'Akşam' ? 'Akşam Vardiyası' : shiftRaw;
+    const hasMutfak = shiftRaw.toLowerCase().includes('mutfak');
+    const hasDepo = shiftRaw.toLowerCase().includes('depo');
+
+    if (hasMutfak && !title.toLowerCase().includes('mutfak')) title += ' + Mutfak';
+    if (hasDepo && !title.toLowerCase().includes('depo')) title += ' + Depo';
+
+    if (shiftRaw.includes('+')) {
+      const custom = shiftRaw.substring(shiftRaw.indexOf('+'));
+      if (!custom.toLowerCase().includes('mutfak') && !custom.toLowerCase().includes('depo')) {
+         title += ' ' + custom;
+      }
+    }
+
+    let statusLabel = 'Mağazada';
+    let statusColor = 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400';
+
+    if (dateOffset === 0) {
+      const activeBreak = dashboardData.colleagueBreaks?.find((b: any) => b.personnel_id === person.id && !b.break_end);
+      if (activeBreak) {
+        statusLabel = 'Molada';
+        statusColor = 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse dark:bg-blue-900/30 dark:text-blue-400';
+      } else {
+        const now = new Date();
+        const hhmm = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        if (shiftType === 'Sabah') {
+          if (hhmm >= '18:00') {
+            statusLabel = 'Mesaisi Bitti';
+            statusColor = 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400';
+          }
+        } else if (shiftType === 'Akşam') {
+          if (hhmm < '13:20') {
+            statusLabel = 'Gelecek';
+            statusColor = 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400';
+          } else if (hhmm >= '22:00') {
+            statusLabel = 'Mesaisi Bitti';
+            statusColor = 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400';
+          }
+        }
+      }
+    } else {
+      statusLabel = 'Yarınki Plan';
+      statusColor = 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400';
+    }
+
+    return { title, statusLabel, statusColor };
+  };
+
+  const myStatusToday = getShiftStatus(personnel, 0);
+  const myStatusTomorrow = getShiftStatus(personnel, 1);
+  const colleagues = (dashboardData.deptCoworkers || []).filter((c: any) => c.id !== personnel.id && c.is_active);
+
+  return (
+    <Card className="glass-card mb-6 border-primary/20 bg-card">
+      <CardHeader className="bg-primary/5 pb-3">
+        <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Reyonum ve Vardiya Durumum ({personnel.department})</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Kendi 2 Günlük Planım */}
+        <div className="space-y-4">
+          <h3 className="font-bold text-foreground border-b pb-2 flex items-center justify-between">
+            <span>👤 Benim Planım</span>
+          </h3>
+          <div className="flex flex-col gap-3">
+            <div className={`p-3 rounded-lg border ${myStatusToday.statusColor}`}>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-bold uppercase opacity-70 flex items-center gap-1"><Clock className="w-3 h-3" /> BUGÜN</span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-background/50 shadow-sm">{myStatusToday.statusLabel}</span>
+              </div>
+              <p className="font-medium text-sm">{myStatusToday.title}</p>
+            </div>
+            
+            <div className={`p-3 rounded-lg border ${myStatusTomorrow.statusColor} opacity-90`}>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-bold uppercase opacity-70 flex items-center gap-1"><CalendarDays className="w-3 h-3" /> YARIN</span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-background/50 shadow-sm">{myStatusTomorrow.statusLabel}</span>
+              </div>
+              <p className="font-medium text-sm">{myStatusTomorrow.title}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Çalışma Arkadaşlarım (Bugün) */}
+        <div className="space-y-4">
+          <h3 className="font-bold text-foreground border-b pb-2 flex items-center justify-between">
+            <span>👥 Çalışma Arkadaşlarım (Bugün)</span>
+          </h3>
+          <div className="flex flex-col gap-2 max-h-[190px] overflow-y-auto pr-2 custom-scrollbar">
+            {colleagues.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">Bu reyonda kayıtlı başka aktif personel yok.</p>
+            ) : (
+              colleagues.map((c: any) => {
+                const status = getShiftStatus(c, 0);
+                return (
+                  <div key={c.id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-2.5 rounded-lg border bg-background/50 transition-colors border-l-4 ${status.statusColor.split(' ')[0].replace('bg-', 'border-')}`}>
+                    <div>
+                      <p className="font-bold text-sm tracking-tight">{c.first_name} {c.last_name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{status.title}</p>
+                    </div>
+                    <div className={`mt-2 sm:mt-0 text-[10px] uppercase font-bold px-2.5 py-1 rounded-full border shadow-sm ${status.statusColor}`}>
+                      {status.statusLabel}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default EmployeePanel;
