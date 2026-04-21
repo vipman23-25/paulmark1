@@ -2,12 +2,33 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, MapPin, Zap, Package, CalendarDays } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Clock, MapPin, Zap, Package, CalendarDays, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from 'recharts';
 
 const Dashboard = () => {
+  const [visibility, setVisibility] = useState(() => {
+    const saved = localStorage.getItem('admin_dashboard_visibility');
+    if (saved) return JSON.parse(saved);
+    return {
+      showTodayShift: true,
+      showActiveBreaks: true,
+      showDailyBreaks: true,
+      showMovements: true,
+      showCargoStatus: true,
+      showOvertimes: true
+    };
+  });
+
+  const toggleVis = (key: keyof typeof visibility) => {
+    const newVal = { ...visibility, [key]: !visibility[key] };
+    setVisibility(newVal);
+    localStorage.setItem('admin_dashboard_visibility', JSON.stringify(newVal));
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_data'],
     queryFn: async () => {
@@ -51,15 +72,31 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <h2 className="text-2xl font-bold text-foreground mb-6">Kontrol Paneli</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-foreground">Kontrol Paneli</h2>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="ml-auto"><Settings className="w-4 h-4 mr-2" /> Görünüm Seçenekleri</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Hangi kartlar gösterilsin?</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={visibility.showTodayShift} onCheckedChange={() => toggleVis('showTodayShift')}>Bugünün Vardiya Özeti</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showActiveBreaks} onCheckedChange={() => toggleVis('showActiveBreaks')}>Aktif Molada Olanlar</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showDailyBreaks} onCheckedChange={() => toggleVis('showDailyBreaks')}>Günlük Mola Dağılımı</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showMovements} onCheckedChange={() => toggleVis('showMovements')}>İzin ve Rapor Durumları</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showCargoStatus} onCheckedChange={() => toggleVis('showCargoStatus')}>Kargo Takip Durumu</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showOvertimes} onCheckedChange={() => toggleVis('showOvertimes')}>Fazla Mesailer</DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      <TodayShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} />
-
-      <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />
-      <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />
-      <MovementsCard movements={movements} personnel={activePersonnel} />
-      <CargoStatusCard shipments={shipments} />
-      <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />
+      {visibility.showTodayShift && <TodayShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} />}
+      {visibility.showActiveBreaks && <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />}
+      {visibility.showDailyBreaks && <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />}
+      {visibility.showMovements && <MovementsCard movements={movements} personnel={activePersonnel} />}
+      {visibility.showCargoStatus && <CargoStatusCard shipments={shipments} />}
+      {visibility.showOvertimes && <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />}
     </div>
   );
 };
