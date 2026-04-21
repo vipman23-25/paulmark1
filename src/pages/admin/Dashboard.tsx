@@ -52,7 +52,7 @@ const Dashboard = () => {
     <div className="space-y-4 animate-fade-in">
       <h2 className="text-2xl font-bold text-foreground mb-6">Kontrol Paneli</h2>
 
-      <TodayShiftCard weeklySchedule={weeklySchedule} />
+      <TodayShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} />
 
       <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />
       <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />
@@ -63,7 +63,7 @@ const Dashboard = () => {
   );
 };
 
-const TodayShiftCard = ({ weeklySchedule }: any) => {
+const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
   if (!weeklySchedule || weeklySchedule.length === 0) return null;
 
   const daysTr = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
@@ -140,6 +140,36 @@ const TodayShiftCard = ({ weeklySchedule }: any) => {
         grouped[finalReyon][cat].push(`${adSoyad}${extra}`);
     });
 
+  const getBreakBadge = (pString: string) => {
+    if (!personnel || !breaks) return null;
+    const nameOnly = pString.split('+')[0].trim();
+    const person = personnel.find((per: any) => `${per.first_name} ${per.last_name}`.trim().toLowerCase() === nameOnly.toLowerCase());
+    if (!person) return null;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayBreaks = breaks.filter((b: any) => (b.break_start || '').startsWith(todayStr) && b.personnel_id === person.id);
+    if (todayBreaks.length === 0) return null;
+
+    const active = todayBreaks.find((b: any) => !b.break_end);
+    if (active) return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 animate-pulse border border-blue-200">Molada</span>;
+
+    const violation = todayBreaks.find((b: any) => {
+      if (!b.break_end) return false;
+      const start = new Date(b.break_start).getTime();
+      const end = new Date(b.break_end).getTime();
+      return Math.round((end - start) / (1000 * 60)) > 60;
+    });
+
+    if (violation) {
+      const start = new Date(violation.break_start).getTime();
+      const end = new Date(violation.break_end).getTime();
+      const dur = Math.round((end - start) / (1000 * 60));
+      return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">İhlal ({dur}dk)</span>;
+    }
+
+    return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">Kullandı</span>;
+  };
+
   return (
     <Card className="glass-card border-primary/20 bg-card">
       <CardHeader className="bg-primary/5 pb-3">
@@ -158,9 +188,12 @@ const TodayShiftCard = ({ weeklySchedule }: any) => {
               {cats['Sabah'] && cats['Sabah'].length > 0 && (
                 <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded border border-blue-100 dark:border-blue-900/30">
                   <h4 className="font-semibold text-blue-700 dark:text-blue-400 mb-2">☀️ Sabah Vardiyası</h4>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-1.5">
                     {cats['Sabah'].map((p, i) => (
-                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                      <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
+                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        {getBreakBadge(p)}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -170,9 +203,12 @@ const TodayShiftCard = ({ weeklySchedule }: any) => {
               {cats['Akşam'] && cats['Akşam'].length > 0 && (
                 <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded border border-indigo-100 dark:border-indigo-900/30">
                   <h4 className="font-semibold text-indigo-700 dark:text-indigo-400 mb-2">🌙 Akşam Vardiyası</h4>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-1.5">
                     {cats['Akşam'].map((p, i) => (
-                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                      <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
+                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        {getBreakBadge(p)}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -182,9 +218,12 @@ const TodayShiftCard = ({ weeklySchedule }: any) => {
               {cats['İzinli'] && cats['İzinli'].length > 0 && (
                 <div className="bg-orange-50/50 dark:bg-orange-900/10 p-3 rounded border border-orange-100 dark:border-orange-900/30">
                   <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-2">⛔ İzinli</h4>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-1.5">
                     {cats['İzinli'].map((p, i) => (
-                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                      <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
+                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        {getBreakBadge(p)}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -194,9 +233,12 @@ const TodayShiftCard = ({ weeklySchedule }: any) => {
               {cats['Ek Görev (Sınıflandırılmamış Shift)'] && cats['Ek Görev (Sınıflandırılmamış Shift)'].length > 0 && (
                 <div className="bg-muted p-3 rounded border border-border">
                   <h4 className="font-semibold text-muted-foreground mb-2">📌 Ek Görevli</h4>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-1.5">
                     {cats['Ek Görev (Sınıflandırılmamış Shift)'].map((p, i) => (
-                      <li key={i} className="text-foreground">{p.replace(/\+/g, ' + ')}</li>
+                      <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
+                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        {getBreakBadge(p)}
+                      </li>
                     ))}
                   </ul>
                 </div>
