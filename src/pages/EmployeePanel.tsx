@@ -96,6 +96,7 @@ const EmployeePanel = () => {
     showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
     showCargoStatus: pVis.showCargo ?? true,
     showLogistics: pVis.showLogistics ?? true,
+    showShiftTracking: pVis.showShiftTracking ?? true,
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({
@@ -464,7 +465,9 @@ const EmployeePanel = () => {
         </div>
 
         {/* Colleague Shift Panel */}
-        <ColleagueShiftPanel dashboardData={dashboardData} personnel={personnel} />
+        {features.showShiftTracking && (
+          <ColleagueShiftPanel dashboardData={dashboardData} personnel={personnel} />
+        )}
 
         {/* Break Section */}
         {features.showBreak && (

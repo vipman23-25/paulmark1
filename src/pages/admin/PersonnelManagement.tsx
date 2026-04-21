@@ -37,6 +37,7 @@ interface Personnel {
     showOvertime?: boolean;
     showOtherPersonnel?: boolean;
     showLogistics?: boolean;
+    showShiftTracking?: boolean;
   };
 }
 
@@ -65,7 +66,8 @@ const PersonnelManagement = () => {
       showMovements: true,
       showOvertime: true,
       showOtherPersonnel: false,
-      showLogistics: true
+      showLogistics: true,
+      showShiftTracking: true
     }
   });
 
@@ -154,7 +156,7 @@ const PersonnelManagement = () => {
     setForm({ 
       first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '', is_active: true,
       module_visibility: {
-        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false, showLogistics: true
+        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false, showLogistics: true, showShiftTracking: true
       }
     });
     setEditingId(null);
@@ -181,7 +183,8 @@ const PersonnelManagement = () => {
         showMovements: p.module_visibility?.showMovements ?? true,
         showOvertime: p.module_visibility?.showOvertime ?? true,
         showOtherPersonnel: p.module_visibility?.showOtherPersonnel ?? false,
-        showLogistics: p.module_visibility?.showLogistics ?? true
+        showLogistics: p.module_visibility?.showLogistics ?? true,
+        showShiftTracking: p.module_visibility?.showShiftTracking ?? true
       }
     });
     setEditingId(p.id);
@@ -344,6 +347,7 @@ const PersonnelManagement = () => {
                     { key: 'showMovements', label: 'Hareketler' },
                     { key: 'showOvertime', label: 'Fazla Mesai' },
                     { key: 'showOtherPersonnel', label: 'Diğer Personeli Görebilir' },
+                    { key: 'showShiftTracking', label: 'Reyonum ve Vardiya Durumum' },
                   ].map((module) => (
                     <div key={module.key} className="flex items-center justify-between">
                       <Label htmlFor={module.key} className="text-sm font-medium leading-none cursor-pointer">
