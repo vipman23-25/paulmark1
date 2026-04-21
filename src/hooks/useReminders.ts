@@ -24,8 +24,8 @@ export const useReminders = () => {
           const reminderDate = new Date(r.reminder_date).setHours(0, 0, 0, 0);
           const today = new Date().setHours(0, 0, 0, 0);
           
-          if (reminderDate < today) {
-            await supabase.from('reminders').delete().eq('id', r.id);
+          if (reminderDate < today && (!r.recurrence || r.recurrence === 'none')) {
+            // ARTIK SİLİNMİYOR: Kullanıcı "kalıcı olsun" dediği için tutuyoruz.
             continue;
           }
           

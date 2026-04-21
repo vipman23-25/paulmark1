@@ -36,6 +36,7 @@ interface Personnel {
     showMovements?: boolean;
     showOvertime?: boolean;
     showOtherPersonnel?: boolean;
+    showLogistics?: boolean;
   };
 }
 
@@ -63,7 +64,8 @@ const PersonnelManagement = () => {
       showCargo: true,
       showMovements: true,
       showOvertime: true,
-      showOtherPersonnel: false
+      showOtherPersonnel: false,
+      showLogistics: true
     }
   });
 
@@ -152,7 +154,7 @@ const PersonnelManagement = () => {
     setForm({ 
       first_name: '', last_name: '', tc_no: '', employee_code: '', gender: '', department: '', start_date: '', end_date: '', password_hash: '', is_active: true,
       module_visibility: {
-        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false
+        showBreak: true, showLeave: true, showSales: true, showAnnouncements: true, showCargo: true, showMovements: true, showOvertime: true, showOtherPersonnel: false, showLogistics: true
       }
     });
     setEditingId(null);
@@ -178,7 +180,8 @@ const PersonnelManagement = () => {
         showCargo: p.module_visibility?.showCargo ?? true,
         showMovements: p.module_visibility?.showMovements ?? true,
         showOvertime: p.module_visibility?.showOvertime ?? true,
-        showOtherPersonnel: p.module_visibility?.showOtherPersonnel ?? false
+        showOtherPersonnel: p.module_visibility?.showOtherPersonnel ?? false,
+        showLogistics: p.module_visibility?.showLogistics ?? true
       }
     });
     setEditingId(p.id);
@@ -337,6 +340,7 @@ const PersonnelManagement = () => {
                     { key: 'showSales', label: 'Satış Hedefi' },
                     { key: 'showAnnouncements', label: 'Duyurular' },
                     { key: 'showCargo', label: 'Koli/Sevkiyat' },
+                    { key: 'showLogistics', label: 'Kargo Takip Modülü' },
                     { key: 'showMovements', label: 'Hareketler' },
                     { key: 'showOvertime', label: 'Fazla Mesai' },
                     { key: 'showOtherPersonnel', label: 'Diğer Personeli Görebilir' },

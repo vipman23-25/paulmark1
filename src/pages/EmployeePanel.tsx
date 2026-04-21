@@ -10,8 +10,9 @@ import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { MapPin, CalendarDays, Umbrella, Coffee, ImagePlus, UserCheck, Timer, Calendar, Info, Clock, Activity, Target, LogOut, Bell, Package, Plus, Minus } from "lucide-react";
+import { MapPin, CalendarDays, Umbrella, Coffee, ImagePlus, UserCheck, Timer, Calendar, Info, Clock, Activity, Target, LogOut, Bell, Package, Plus, Minus, Truck, Trash2 } from "lucide-react";
 import { format } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 const DAYS = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
@@ -43,6 +44,13 @@ const EmployeePanel = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dayOffDescription, setDayOffDescription] = useState('');
+  const [isLogisticsOpen, setIsLogisticsOpen] = useState(false);
+  const [logisticsForm, setLogisticsForm] = useState({
+    company_name: '',
+    shipment_date: new Date().toISOString().split('T')[0],
+    content_description: '',
+    tracking_number: ''
+  });
 
   useEffect(() => {
     if (!user) navigate('/login');
@@ -87,6 +95,7 @@ const EmployeePanel = () => {
     showMovements: pVis.showMovements ?? baseFeatures.showMovements,
     showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
     showCargoStatus: pVis.showCargo ?? true,
+    showLogistics: pVis.showLogistics ?? true,
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({
@@ -101,7 +110,9 @@ const EmployeePanel = () => {
         { data: movements },
         { data: reminders },
         { data: allDepartmentSalesTargets },
-        { data: shipments }
+        { data: shipments },
+        { data: logistics },
+        { data: cargoCompanies }
       ] = await Promise.all([
         supabase.from('weekly_day_off').select('*').eq('personnel_id', personnel.id),
         supabase.from('break_records').select('*').eq('personnel_id', personnel.id),
@@ -109,37 +120,125 @@ const EmployeePanel = () => {
         supabase.from('personnel_movements').select('*').eq('personnel_id', personnel.id).order('start_date', { ascending: false }),
         (supabase.from('reminders').select('*').eq('is_active', true).order('reminder_date', { ascending: true }) as any),
         (supabase.from('sales_targets' as any).select('*, personnel!inner(department)').eq('personnel.department', personnel.department || 'Bilinmiyor').eq('target_month', currentMonth) as any),
-        supabase.from('cargo_shipments' as any).select('*').order('arrival_date', { ascending: true })
+        supabase.from('cargo_shipments' as any).select('*').order('arrival_date', { ascending: true }),
+        supabase.from('logistics_records' as any).select('*').order('shipment_date', { ascending: false }),
+        supabase.from('cargo_companies' as any).select('*').order('created_at', { ascending: true })
       ]);
       
-      const safeReminders = (reminders || []).filter((r: any) => 
-        r.personnel_id === personnel.id || 
-        r.department_name === personnel.department || 
-        r.department_name === 'Tümü'
-      );
+      const [
+        { data: responses },
+        { data: settingsData }
+      ] = await Promise.all([
+        supabase.from('reminder_responses' as any).select('*')
+          .eq('personnel_id', personnel.id)
+          .eq('response_date', new Date().toISOString().split('T')[0]),
+        supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').single()
+      ]);
+      const taskStatuses = settingsData?.setting_value?.taskStatuses || ['Yapıldı', 'Yapılmadı', 'Beklemede', 'Okudum & Anladım'];
       
       const salesTarget = (allDepartmentSalesTargets || []).find((s: any) => s.personnel_id === personnel.id) || null;
       const deptTargetQuota = (allDepartmentSalesTargets || []).reduce((acc: number, curr: any) => acc + (Number(curr.target_quota) || 0), 0);
       const deptRealizedSales = (allDepartmentSalesTargets || []).reduce((acc: number, curr: any) => acc + (Number(curr.realized_sales) || 0), 0);
+
+      const today = new Date();
+      const todayDayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday...
+      const todayDateOfMonth = today.getDate(); // 1-31
+
+      const visibleReminders = (reminders || []).filter((rem: any) => {
+        if (!rem.recurrence || rem.recurrence === 'none' || rem.recurrence === 'daily') return true;
+        
+        const parts = rem.recurrence.split(',');
+        const type = parts[0];
+        const vals = parts.slice(1).map(Number);
+        
+        if (type === 'weekly') {
+          return vals.includes(todayDayOfWeek);
+        }
+        if (type === 'monthly') {
+          return vals.includes(todayDateOfMonth);
+        }
+        return true;
+      });
 
       return { 
         weeklyDayOffs: weeklyDayOffs || [], 
         breaks: breaks || [], 
         overtimes: overtimes || [], 
         movements: movements || [],
-        reminders: safeReminders || [],
+        reminders: visibleReminders,
         salesTarget,
         deptTargetQuota,
         deptRealizedSales,
-        shipments: shipments || []
+        shipments: shipments || [],
+        logistics: logistics || [],
+        cargoCompanies: cargoCompanies || [],
+        responses: responses || [],
+        taskStatuses
       };
     },
     enabled: !!personnel?.id,
     refetchInterval: 30000
   });
 
+  const submitSurveyResponseMutation = useMutation({
+    mutationFn: async ({ reminder_id, status }: { reminder_id: string, status: string }) => {
+      const today = new Date().toISOString().split('T')[0];
+      const { error } = await supabase.from('reminder_responses' as any).upsert([{
+        reminder_id,
+        personnel_id: personnel?.id,
+        response_date: today,
+        status,
+        notes: ''
+      }], { onConflict: 'reminder_id, personnel_id, response_date' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
+      toast.success('Yanıtınız kaydedildi');
+    },
+    onError: (err: any) => toast.error('Yanıt kaydedilemedi: ' + err.message)
+  });
+
+  const addLogisticsMutation = useMutation({
+    mutationFn: async (data: typeof logisticsForm) => {
+      const { error } = await supabase.from('logistics_records' as any).insert([data]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
+      toast.success('Yeni kargo kaydı eklendi');
+      setIsLogisticsOpen(false);
+      setLogisticsForm({
+        company_name: '',
+        shipment_date: new Date().toISOString().split('T')[0],
+        content_description: '',
+        tracking_number: ''
+      });
+    },
+    onError: (err: any) => toast.error('Kargo ekleme hatası: ' + err.message)
+  });
+
+  const handleAddLogistics = () => {
+    if (!logisticsForm.company_name) { toast.error("Firma adı zorunludur."); return; }
+    if (!logisticsForm.content_description) { toast.error("Açıklama zorunludur."); return; }
+    if (!logisticsForm.tracking_number) { toast.error("Takip no zorunludur."); return; }
+    addLogisticsMutation.mutate(logisticsForm);
+  };
+
+  const deleteLogisticsMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('logistics_records' as any).delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
+      toast.success('Kargo kaydı silindi');
+    },
+    onError: (err: any) => toast.error('Silme hatası: ' + err.message)
+  });
+
   const updateCargoMutation = useMutation({
-    mutationFn: async ({ id, newCount, totalBoxes, notes }: { id: string, newCount: number, totalBoxes: number, notes?: string }) => {
+    mutationFn: async ({ id, newCount, totalBoxes, notes, addedCount }: { id: string, newCount: number, totalBoxes: number, notes?: string, addedCount?: number }) => {
       const isComplete = newCount >= totalBoxes;
       
       const payload: any = { 
@@ -149,7 +248,7 @@ const EmployeePanel = () => {
       };
 
       if (notes !== undefined) {
-        payload.notes = notes;
+        payload.personnel_notes = notes;
       }
 
       const { error } = await supabase
@@ -157,6 +256,14 @@ const EmployeePanel = () => {
         .update(payload)
         .eq('id', id);
       if (error) throw error;
+
+      if (addedCount && addedCount !== 0 && personnel) {
+        await supabase.from('cargo_shipment_logs' as any).insert([{
+          shipment_id: id,
+          personnel_name: `${personnel.first_name} ${personnel.last_name}`,
+          added_count: addedCount
+        }]);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employee_dashboard'] });
@@ -267,10 +374,29 @@ const EmployeePanel = () => {
   const activeBreak = todayBreaks.find((b: any) => !b.break_end);
   const recentBreaks = safeBreaks.filter((b: any) => b.break_end).sort((a: any, b: any) => new Date(b.break_end).getTime() - new Date(a.break_end).getTime()).slice(0, 5);
 
+  const breakViolationsCount = safeBreaks.filter((b: any) => {
+    if (!b.break_end) return false;
+    const start = new Date(b.break_start);
+    const end = new Date(b.break_end);
+    const dur = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+    return dur > breakLimit;
+  }).length;
+
   // Overtime Logic
   const safeOvertimes = overtimes || [];
   const earnedOvertime = safeOvertimes.filter((r: any) => !(r.record_type || '').toLowerCase().includes('alacak') && !(r.record_type || '').toLowerCase().includes('kullanım')).reduce((s: number, r: any) => s + Number(r.hours), 0);
   const usedCredit = safeOvertimes.filter((r: any) => (r.record_type || '').toLowerCase().includes('alacak') || (r.record_type || '').toLowerCase().includes('kullanım')).reduce((s: number, r: any) => s + Number(r.hours), 0);
+
+  const totalOverdueMinutes = safeBreaks.reduce((sum: number, b: any) => {
+    if (!b.break_end) return sum;
+    const start = new Date(b.break_start);
+    const end = new Date(b.break_end);
+    const dur = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+    if (dur > breakLimit) {
+      return sum + (dur - breakLimit);
+    }
+    return sum;
+  }, 0);
 
   const formatDuration = (totalH: number) => {
     const abs = Math.abs(totalH);
@@ -383,8 +509,8 @@ const EmployeePanel = () => {
               <div className="p-4 rounded-lg bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
                 <div className="flex items-center gap-2 mb-2 text-red-600 dark:text-red-400"><Coffee className="h-4 w-4" /><h3 className="font-semibold text-sm">Mola İhlal Özeti</h3></div>
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">İhlale Düşen Mola Sayısı: <span className="font-bold text-foreground">- Kez</span></p>
-                  <p className="text-xs text-muted-foreground">Toplam Gecikme: <span className="font-bold text-foreground">{(personnel as any).total_overdue_break || 0} Dk</span></p>
+                  <p className="text-xs text-muted-foreground">İhlale Düşen Mola Sayısı: <span className="font-bold text-foreground">{breakViolationsCount} Kez</span></p>
+                  <p className="text-xs text-muted-foreground">Toplam Gecikme: <span className="font-bold text-foreground">{totalOverdueMinutes} Dk</span></p>
                 </div>
               </div>
               )}
@@ -499,18 +625,56 @@ const EmployeePanel = () => {
 
               {features.showReminders && (
               <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                <div className="flex items-center gap-2 mb-3 text-indigo-500"><Bell className="h-4 w-4" /><h3 className="font-semibold text-sm">Duyurular</h3></div>
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {reminders.length > 0 ? reminders.map((rem: any) => (
-                    <div key={rem.id} className="flex flex-col bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 p-3 rounded-md">
-                       <span className="font-semibold text-sm text-foreground mb-1">{rem.title}</span>
-                       {rem.description && <span className="text-xs text-muted-foreground whitespace-pre-wrap">{rem.description}</span>}
-                       <span className="text-[10px] text-indigo-400 mt-2 text-right font-medium">
-                          {rem.reminder_datetime && !isNaN(new Date(rem.reminder_datetime).getTime()) ? `Son Geçerlilik: ${format(new Date(rem.reminder_datetime), 'dd.MM.yyyy')}` : ''}
-                       </span>
+                <div className="flex items-center gap-2 mb-3 text-indigo-500"><Bell className="h-4 w-4" /><h3 className="font-semibold text-sm">Duyurular ve Görevler</h3></div>
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                  {dashboardData?.reminders && dashboardData.reminders.length > 0 ? dashboardData.reminders.map((rem: any) => {
+                    const response = dashboardData.responses?.find((r:any) => r.reminder_id === rem.id);
+                    return (
+                    <div key={rem.id} className={`flex flex-col border p-4 rounded-xl shadow-sm ${rem.is_survey ? 'bg-purple-50/50 dark:bg-purple-950/20 border-purple-100 dark:border-purple-900/30' : 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900/30'}`}>
+                       <div className="flex justify-between items-start gap-2 mb-2">
+                         <span className="font-semibold text-base text-foreground">{rem.title}</span>
+                         {rem.is_survey && <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-100 border-none shrink-0">Anket / Görev</Badge>}
+                       </div>
+                       
+                       {rem.description && <span className="text-sm text-foreground/80 whitespace-pre-wrap mb-3">{rem.description}</span>}
+                       
+                       {rem.is_survey && (
+                         <div className="mt-2 pt-3 border-t border-black/5 dark:border-white/5">
+                           {response ? (
+                             <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 p-2 rounded-lg">
+                               <span className="text-sm font-medium text-muted-foreground">Bugünkü Durumunuz:</span>
+                               <Badge className="bg-success text-white border-0">{response.status}</Badge>
+                             </div>
+                           ) : (
+                             <div className="space-y-2">
+                               <span className="text-xs font-semibold text-muted-foreground block mb-1">Durum Bildirin:</span>
+                               <div className="flex flex-wrap gap-2">
+                                 {dashboardData.taskStatuses.map((status: string) => (
+                                   <Button 
+                                     key={status} 
+                                     size="sm" 
+                                     variant="secondary" 
+                                     className="hover:bg-primary hover:text-primary-foreground min-w-[80px]"
+                                     onClick={() => submitSurveyResponseMutation.mutate({ reminder_id: rem.id, status })}
+                                     disabled={submitSurveyResponseMutation.isPending}
+                                   >
+                                     {status}
+                                   </Button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                       )}
+                       
+                       {!rem.is_survey && rem.reminder_datetime && !isNaN(new Date(rem.reminder_datetime).getTime()) && (
+                         <span className="text-[10px] text-indigo-400 mt-2 text-right font-medium">
+                            Son Geçerlilik: {format(new Date(rem.reminder_datetime), 'dd.MM.yyyy')}
+                         </span>
+                       )}
                     </div>
-                  )) : (
-                    <div className="p-3 bg-muted/20 text-center rounded text-xs text-muted-foreground">Şu an için aktif bir duyuru bulunmuyor.</div>
+                  )}) : (
+                    <div className="p-4 bg-muted/20 text-center rounded-lg text-sm text-muted-foreground border border-dashed">Şu an için aktif bir duyuru/görev bulunmuyor.</div>
                   )}
                 </div>
               </div>
@@ -567,7 +731,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Cargo Shipments Tracking Section */}
-        {features.showCargoStatus && dashboardData?.shipments && dashboardData.shipments.filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor').length > 0 && (
+        {features.showCargoStatus && dashboardData?.shipments && dashboardData.shipments.length > 0 && (
           <Card className="glass-card mt-6">
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-xl font-bold flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> Koli / Sevkiyat Takibi</CardTitle>
@@ -575,8 +739,12 @@ const EmployeePanel = () => {
             <CardContent className="pt-4 px-3 sm:px-6">
               <div className="flex flex-col gap-4">
                 {dashboardData.shipments
-                  .filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor')
-                  .sort((a: any, b: any) => new Date(a.arrival_date).getTime() - new Date(b.arrival_date).getTime())
+                  .sort((a: any, b: any) => {
+                    const aComp = a.counted_boxes >= a.total_boxes;
+                    const bComp = b.counted_boxes >= b.total_boxes;
+                    if (aComp === bComp) return new Date(b.arrival_date).getTime() - new Date(a.arrival_date).getTime();
+                    return aComp ? 1 : -1;
+                  })
                   .map((shipment: any) => {
                     const remaining = Math.max(0, shipment.total_boxes - shipment.counted_boxes);
                     const progress = shipment.total_boxes > 0 ? (shipment.counted_boxes / shipment.total_boxes) * 100 : 0;
@@ -594,13 +762,18 @@ const EmployeePanel = () => {
                             </Badge>
                           </div>
                           <div className="mt-2 space-y-1">
-                            <Label className="text-[11px] font-semibold uppercase text-muted-foreground ml-1">Açıklama / Not Ekleyin</Label>
+                            {shipment.notes && (
+                              <div className="text-xs bg-primary/10 text-primary p-2 rounded mb-2">
+                                <span className="font-semibold">Yönetici Notu:</span> {shipment.notes}
+                              </div>
+                            )}
+                            <Label className="text-[11px] font-semibold uppercase text-muted-foreground ml-1">Personel Açıklaması / Not Ekleyin</Label>
                             <Input 
-                              defaultValue={shipment.notes || ''}
+                              defaultValue={shipment.personnel_notes || ''}
                               placeholder="Eksik, hasarlı koli tespiti veya ek notlar..."
                               className="h-10 text-sm bg-muted/30"
                               onBlur={(e) => {
-                                if (e.target.value !== (shipment.notes || '')) {
+                                if (e.target.value !== (shipment.personnel_notes || '')) {
                                   updateCargoMutation.mutate({ 
                                     id: shipment.id, 
                                     newCount: shipment.counted_boxes, 
@@ -625,7 +798,7 @@ const EmployeePanel = () => {
                               <p className="text-lg sm:text-xl font-bold text-primary">{shipment.counted_boxes}</p>
                             </div>
                             <div className="bg-destructive/10 rounded-lg p-1.5 sm:p-2 border border-destructive/20 shadow-sm flex flex-col justify-center overflow-hidden">
-                              <p className="text-[10px] w-full text-destructive mb-1 uppercase font-bold truncate tracking-tighter">Son</p>
+                              <p className="text-[10px] w-full text-destructive mb-1 uppercase font-bold truncate tracking-tighter">Kalan</p>
                               <p className="text-xl sm:text-2xl font-bold text-destructive animate-pulse">{remaining}</p>
                             </div>
                           </div>
@@ -647,7 +820,7 @@ const EmployeePanel = () => {
                             className="h-14 w-14 shrink-0 rounded-xl"
                             onClick={() => {
                               if (shipment.counted_boxes > 0) {
-                                updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes - 1, totalBoxes: shipment.total_boxes });
+                                updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes - 1, totalBoxes: shipment.total_boxes, addedCount: -1 });
                               }
                             }}
                             disabled={shipment.counted_boxes === 0 || updateCargoMutation.isPending}
@@ -662,7 +835,7 @@ const EmployeePanel = () => {
                             size="icon"
                             className="h-14 w-14 shrink-0 rounded-xl"
                             onClick={() => {
-                              updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes + 1, totalBoxes: shipment.total_boxes });
+                              updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes + 1, totalBoxes: shipment.total_boxes, addedCount: 1 });
                             }}
                             disabled={updateCargoMutation.isPending}
                           >
@@ -674,6 +847,86 @@ const EmployeePanel = () => {
                     );
                   })}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Logistics Tracking Section */}
+        {features.showLogistics && (
+          <Card className="glass-card mt-6">
+            <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+              <CardTitle className="text-xl font-bold flex items-center gap-2"><Truck className="h-5 w-5 text-primary" /> Kargo Takip (Kayıtlar)</CardTitle>
+              <Dialog open={isLogisticsOpen} onOpenChange={setIsLogisticsOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="bg-primary/90 hover:bg-primary"><Plus className="w-4 h-4 mr-1"/> Yeni Kargo</Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader><DialogTitle>Yeni Kargo Ekle</DialogTitle></DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Gönderi Tarihi</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input type="date" className="pl-9" value={logisticsForm.shipment_date} onChange={e => setLogisticsForm({...logisticsForm, shipment_date: e.target.value})} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Kargo Firması</Label>
+                      <select 
+                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                        value={logisticsForm.company_name}
+                        onChange={(e) => setLogisticsForm({ ...logisticsForm, company_name: e.target.value })}
+                      >
+                        <option value="">Seçiniz...</option>
+                        {dashboardData?.cargoCompanies?.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>İçerik / Açıklama</Label>
+                      <Input value={logisticsForm.content_description} onChange={e => setLogisticsForm({...logisticsForm, content_description: e.target.value})} placeholder="Örn: İade kolisi..." />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Takip Numarası</Label>
+                      <Input value={logisticsForm.tracking_number} onChange={e => setLogisticsForm({...logisticsForm, tracking_number: e.target.value})} placeholder="Takip No..." />
+                    </div>
+                    <Button className="w-full mt-4" onClick={handleAddLogistics} disabled={addLogisticsMutation.isPending}>
+                      {addLogisticsMutation.isPending ? 'Ekleniyor...' : 'Kargo Ekle'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent className="pt-4 px-3 sm:px-6">
+              {(!dashboardData?.logistics || dashboardData.logistics.length === 0) ? (
+                 <p className="text-muted-foreground text-center py-4 text-sm">Henüz kargo kaydı bulunmuyor.</p>
+              ) : (
+                <div className="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
+                  {dashboardData.logistics.map((log: any) => (
+                    <div key={log.id} className="p-4 rounded-xl border bg-card/50 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="bg-primary/5">{log.company_name}</Badge>
+                          <span className="text-sm font-medium">{format(new Date(log.shipment_date), 'dd.MM.yyyy')}</span>
+                        </div>
+                        <p className="font-semibold">{log.content_description}</p>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 sm:mt-0">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Takip Numarası</p>
+                          <p className="font-mono bg-muted px-3 py-1.5 rounded-lg text-sm select-all">{log.tracking_number}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          if (window.confirm("Bu kargo kaydını silmek istediğinize emin misiniz?")) {
+                            deleteLogisticsMutation.mutate(log.id);
+                          }
+                        }} disabled={deleteLogisticsMutation.isPending}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

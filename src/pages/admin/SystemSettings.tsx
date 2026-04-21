@@ -14,6 +14,7 @@ export interface SystemSettings {
   breakLimitMinutes: number;
   movementTypes: string[];
   overtimeTypes: string[];
+  taskStatuses?: string[];
   announcementImages?: string[];
   employeeDashboardFeatures?: {
     showOvertime: boolean;
@@ -30,6 +31,7 @@ const defaultSettings: SystemSettings = {
   breakLimitMinutes: 60,
   movementTypes: ['İzin', 'Hastalık İzni', 'Muafiyet', 'Başka Görev'],
   overtimeTypes: ['Fazla Mesai', 'Alacak (Kullanım)'],
+  taskStatuses: ['Yapıldı', 'Yapılmadı', 'Beklemede', 'Okudum & Anladım'],
   announcementImages: [],
   employeeDashboardFeatures: {
     showOvertime: true,
@@ -46,6 +48,7 @@ const SystemSettingsView = () => {
   const queryClient = useQueryClient();
   const [newMovementType, setNewMovementType] = useState('');
   const [newOvertimeType, setNewOvertimeType] = useState('');
+  const [newTaskStatus, setNewTaskStatus] = useState('');
   const [localLimit, setLocalLimit] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -152,6 +155,26 @@ const SystemSettingsView = () => {
     const updated = { ...settings, overtimeTypes: settings.overtimeTypes.filter(t => t !== type) };
     updateMutation.mutate(updated, {
       onSuccess: () => toast.success('Mesai türü silindi')
+    });
+  };
+
+  const addTaskStatus = () => {
+    const currentList = settings.taskStatuses || defaultSettings.taskStatuses!;
+    if (!newTaskStatus.trim() || currentList.includes(newTaskStatus.trim())) return;
+    const updated = { ...settings, taskStatuses: [...currentList, newTaskStatus.trim()] };
+    updateMutation.mutate(updated, {
+      onSuccess: () => {
+        setNewTaskStatus('');
+        toast.success('Görev etiketi eklendi');
+      }
+    });
+  };
+
+  const removeTaskStatus = (type: string) => {
+    const currentList = settings.taskStatuses || defaultSettings.taskStatuses!;
+    const updated = { ...settings, taskStatuses: currentList.filter(t => t !== type) };
+    updateMutation.mutate(updated, {
+      onSuccess: () => toast.success('Görev etiketi silindi')
     });
   };
 
@@ -401,6 +424,35 @@ const SystemSettingsView = () => {
                 <li key={idx} className="flex justify-between items-center bg-muted/50 p-2 rounded">
                   <span>{type}</span>
                   <Button variant="ghost" size="sm" onClick={() => removeOvertimeType(type)} disabled={updateMutation.isPending} className="text-red-500 hover:text-red-700">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 mt-6">
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle>Duyuru / Görev Etiketleri (Anket Durumları)</CardTitle>
+            <CardDescription>Personelin anketlerde veya görevlerde işaretleyebileceği durum seçenekleri ("Yapıldı", "Yapılmadı")</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Yeni durum etiketi ekle..."
+                value={newTaskStatus}
+                onChange={(e) => setNewTaskStatus(e.target.value)}
+              />
+              <Button onClick={addTaskStatus} disabled={updateMutation.isPending}><Plus className="w-4 h-4" /></Button>
+            </div>
+            <ul className="space-y-2">
+              {(settings.taskStatuses || defaultSettings.taskStatuses!).map((type, idx) => (
+                <li key={idx} className="flex justify-between items-center bg-muted/50 p-2 rounded">
+                  <span>{type}</span>
+                  <Button variant="ghost" size="sm" onClick={() => removeTaskStatus(type)} disabled={updateMutation.isPending} className="text-red-500 hover:text-red-700">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </li>

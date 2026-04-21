@@ -30,7 +30,7 @@ const CargoManagement = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('cargo_shipments' as any)
-        .select('*')
+        .select('*, cargo_shipment_logs(*)')
         .order('arrival_date', { ascending: false });
       
       if (error) throw error;
@@ -220,7 +220,7 @@ const CargoManagement = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Açıklama / Notlar</Label>
+                <Label>Admin Notu / Açıklama</Label>
                 <Input 
                   placeholder="Araç plakası veya ek notlar..."
                   value={form.notes} 
@@ -251,6 +251,7 @@ const CargoManagement = () => {
                 <TableHead className="text-center">Sayılan</TableHead>
                 <TableHead className="text-center">Kalan</TableHead>
                 <TableHead>Durum & İstatistik</TableHead>
+                <TableHead>Son İşlemler (Log)</TableHead>
                 <TableHead>Notlar</TableHead>
                 <TableHead className="text-right">İşlemler</TableHead>
               </TableRow>
@@ -258,7 +259,7 @@ const CargoManagement = () => {
             <TableBody>
               {shipments?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Kayıtlı sevkiyat bulunamadı.</TableCell>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Kayıtlı sevkiyat bulunamadı.</TableCell>
                 </TableRow>
               ) : (
                 shipments?.map((item: any) => {
@@ -300,7 +301,30 @@ const CargoManagement = () => {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{item.notes}</TableCell>
+                      <TableCell>
+                        <div className="max-h-[100px] overflow-y-auto space-y-1 pr-1 text-xs min-w-[150px]">
+                          {item.cargo_shipment_logs && item.cargo_shipment_logs.length > 0 ? (
+                            item.cargo_shipment_logs
+                              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                              .map((log: any) => (
+                              <div key={log.id} className="bg-muted/50 p-1.5 rounded border-l-2 border-primary pl-2 mb-1">
+                                <span className="font-semibold text-foreground">{log.personnel_name}: </span>
+                                <span className={log.added_count > 0 ? 'text-success font-medium' : 'text-destructive font-medium'}>
+                                  {log.added_count > 0 ? `+${log.added_count}` : log.added_count}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground ml-1">({format(new Date(log.created_at), 'dd.MM HH:mm', { locale: tr })})</span>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">Kayıt yok</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {item.notes && <div className="mb-1"><span className="font-semibold text-primary">Admin:</span> {item.notes}</div>}
+                        {item.personnel_notes && <div><span className="font-semibold text-muted-foreground">Personel:</span> {item.personnel_notes}</div>}
+                        {!item.notes && !item.personnel_notes && <span className="text-muted-foreground italic">-</span>}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                           <Pencil className="w-4 h-4 text-blue-500" />
