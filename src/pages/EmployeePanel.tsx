@@ -731,7 +731,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Cargo Shipments Tracking Section */}
-        {features.showCargoStatus && dashboardData?.shipments && dashboardData.shipments.length > 0 && (
+        {features.showCargoStatus && dashboardData?.shipments && dashboardData.shipments.filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor').length > 0 && (
           <Card className="glass-card mt-6">
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-xl font-bold flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> Koli / Sevkiyat Takibi</CardTitle>
@@ -739,6 +739,7 @@ const EmployeePanel = () => {
             <CardContent className="pt-4 px-3 sm:px-6">
               <div className="flex flex-col gap-4">
                 {dashboardData.shipments
+                  .filter((s:any) => s.total_boxes > s.counted_boxes || s.status === 'Sayılıyor')
                   .sort((a: any, b: any) => {
                     const aComp = a.counted_boxes >= a.total_boxes;
                     const bComp = b.counted_boxes >= b.total_boxes;
