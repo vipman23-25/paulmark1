@@ -15,6 +15,7 @@ const Dashboard = () => {
     if (saved) return JSON.parse(saved);
     return {
       showTodayShift: true,
+      showTomorrowShift: false,
       showActiveBreaks: true,
       showDailyBreaks: true,
       showMovements: true,
@@ -82,6 +83,7 @@ const Dashboard = () => {
             <DropdownMenuLabel>Hangi kartlar gösterilsin?</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem checked={visibility.showTodayShift} onCheckedChange={() => toggleVis('showTodayShift')}>Bugünün Vardiya Özeti</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showTomorrowShift} onCheckedChange={() => toggleVis('showTomorrowShift')}>Yarının Vardiya Özeti</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showActiveBreaks} onCheckedChange={() => toggleVis('showActiveBreaks')}>Aktif Molada Olanlar</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showDailyBreaks} onCheckedChange={() => toggleVis('showDailyBreaks')}>Günlük Mola Dağılımı</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showMovements} onCheckedChange={() => toggleVis('showMovements')}>İzin ve Rapor Durumları</DropdownMenuCheckboxItem>
@@ -91,7 +93,8 @@ const Dashboard = () => {
         </DropdownMenu>
       </div>
 
-      {visibility.showTodayShift && <TodayShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} />}
+      {visibility.showTodayShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} daysOffset={0} />}
+      {visibility.showTomorrowShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} daysOffset={1} />}
       {visibility.showActiveBreaks && <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />}
       {visibility.showDailyBreaks && <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />}
       {visibility.showMovements && <MovementsCard movements={movements} personnel={activePersonnel} />}
@@ -124,11 +127,13 @@ const LiveBreakBadge = ({ activeBreak }: { activeBreak: any }) => {
   return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 animate-pulse border border-blue-200">Molada ({elapsed}dk, Kalan: {remaining}dk)</span>;
 };
 
-const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
+const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { weeklySchedule: any, breaks: any, personnel: any, daysOffset?: number }) => {
   if (!weeklySchedule || weeklySchedule.length === 0) return null;
 
   const daysTr = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-  const todayName = daysTr[new Date().getDay()];
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + daysOffset);
+  const targetName = daysTr[targetDate.getDay()];
 
   // structure: { "Erkek Reyonu": { "Sabah": [], "Akşam": [], "İzinli": [] } }
     const shifts: Record<string, any> = {}; 
@@ -137,7 +142,7 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
         const adSoyad = row['Ad Soyad']?.toString().trim();
         if (!adSoyad || adSoyad === '----------------' || adSoyad === 'Personel Bulunamadı') return;
         const reyon = row['Reyon']?.toString().trim() || 'Diğer';
-        const rawVal = (row[todayName] || '').toString().trim();
+        const rawVal = (row[targetName] || '').toString().trim();
 
         const isDepoRow = reyon.startsWith('Depo (') || reyon === '--- DEPO ÇALIŞMASI ---';
         const isMutfakRow = reyon.startsWith('Mutfak (') || reyon === '--- MUTFAK ÇALIŞMASI ---';
@@ -202,6 +207,7 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
     });
 
   const getBreakBadge = (pString: string) => {
+    if (daysOffset !== 0) return null;
     if (!personnel || !breaks) return null;
     const nameOnly = pString.split('+')[0].trim();
     const person = personnel.find((per: any) => `${per.first_name} ${per.last_name}`.trim().toLowerCase() === nameOnly.toLowerCase());
@@ -212,7 +218,7 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
     if (todayBreaks.length === 0) return null;
 
     const active = todayBreaks.find((b: any) => !b.break_end);
-    if (active) return <LiveBreakBadge activeBreak={active} />;
+    if (active && daysOffset === 0) return <LiveBreakBadge activeBreak={active} />;
 
     const violation = todayBreaks.find((b: any) => {
       if (!b.break_end) return false;
@@ -243,7 +249,7 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
       <CardHeader className="bg-primary/5 pb-3">
         <CardTitle className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary" />
-          Bugünün Vardiya ve Görev Özeti ({todayName})
+          {daysOffset === 0 ? 'Bugünün' : 'Yarının'} Vardiya ve Görev Özeti ({targetName})
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-6">

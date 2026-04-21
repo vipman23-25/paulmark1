@@ -335,8 +335,8 @@ const PersonnelManagement = () => {
               </div>
 
               <div className="pt-4 mt-2 border-t">
-                <Label className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-4 block">Modül Görünürlüğü</Label>
-                <div className="space-y-3 px-1">
+                <Label className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-2 block">Modül Görünürlüğü</Label>
+                <div className="space-y-3 px-3 py-3 border rounded-lg bg-muted/20 max-h-[170px] overflow-y-auto custom-scrollbar">
                   {[
                     { key: 'showBreak', label: 'Mola Takibi' },
                     { key: 'showLeave', label: 'İzin' },
