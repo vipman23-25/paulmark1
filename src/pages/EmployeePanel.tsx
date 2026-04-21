@@ -135,6 +135,18 @@ const EmployeePanel = () => {
         supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').single()
       ]);
       const taskStatuses = settingsData?.setting_value?.taskStatuses || ['Yapıldı', 'Yapılmadı', 'Beklemede', 'Okudum & Anladım'];
+      const weeklySchedule = settingsData?.setting_value?.weeklySchedule || [];
+      
+      const { data: deptCoworkers } = await supabase.from('personnel' as any).select('*').eq('department', personnel.department || 'Bilinmiyor');
+      const coworkerIds = (deptCoworkers || []).map((c: any) => c.id);
+      
+      const [
+         { data: colleagueBreaks },
+         { data: colleagueMovements }
+      ] = await Promise.all([
+         coworkerIds.length > 0 ? supabase.from('break_records' as any).select('*').in('personnel_id', coworkerIds) : { data: [] },
+         coworkerIds.length > 0 ? supabase.from('personnel_movements' as any).select('*').in('personnel_id', coworkerIds).order('start_date', { ascending: false }) : { data: [] }
+      ]);
       
       const salesTarget = (allDepartmentSalesTargets || []).find((s: any) => s.personnel_id === personnel.id) || null;
       const deptTargetQuota = (allDepartmentSalesTargets || []).reduce((acc: number, curr: any) => acc + (Number(curr.target_quota) || 0), 0);
@@ -173,7 +185,11 @@ const EmployeePanel = () => {
         logistics: logistics || [],
         cargoCompanies: cargoCompanies || [],
         responses: responses || [],
-        taskStatuses
+        taskStatuses,
+        weeklySchedule,
+        deptCoworkers: deptCoworkers || [],
+        colleagueBreaks: colleagueBreaks || [],
+        colleagueMovements: colleagueMovements || []
       };
     },
     enabled: !!personnel?.id,
@@ -446,6 +462,9 @@ const EmployeePanel = () => {
           </div>
           <Button variant="outline" size="sm" onClick={handleSignOut}><LogOut className="w-4 h-4 mr-2" /> Çıkış</Button>
         </div>
+
+        {/* Colleague Shift Panel */}
+        <ColleagueShiftPanel dashboardData={dashboardData} personnel={personnel} />
 
         {/* Break Section */}
         {features.showBreak && (
