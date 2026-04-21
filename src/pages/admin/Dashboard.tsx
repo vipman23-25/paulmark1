@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -61,6 +62,29 @@ const Dashboard = () => {
       <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />
     </div>
   );
+};
+
+const LiveBreakBadge = ({ activeBreak }: { activeBreak: any }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const ms = Date.now() - new Date(activeBreak.break_start).getTime();
+      setElapsed(Math.floor(ms / 60000));
+    };
+    update();
+    const int = setInterval(update, 60000);
+    return () => clearInterval(int);
+  }, [activeBreak]);
+
+  const limit = 60;
+  const remaining = limit - elapsed;
+
+  if (remaining < 0) {
+    return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 animate-pulse border border-red-200" title="Süre aşıldı!">İhlal Süresi ({Math.abs(remaining)}dk)</span>;
+  }
+
+  return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 animate-pulse border border-blue-200">Molada ({elapsed}dk, Kalan: {remaining}dk)</span>;
 };
 
 const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
@@ -151,7 +175,7 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
     if (todayBreaks.length === 0) return null;
 
     const active = todayBreaks.find((b: any) => !b.break_end);
-    if (active) return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 animate-pulse border border-blue-200">Molada</span>;
+    if (active) return <LiveBreakBadge activeBreak={active} />;
 
     const violation = todayBreaks.find((b: any) => {
       if (!b.break_end) return false;
@@ -167,7 +191,14 @@ const TodayShiftCard = ({ weeklySchedule, breaks, personnel }: any) => {
       return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">İhlal ({dur}dk)</span>;
     }
 
-    return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">Kullandı</span>;
+    const totalFinishedDuration = todayBreaks.reduce((acc: number, b: any) => {
+       if (!b.break_end) return acc;
+       const start = new Date(b.break_start).getTime();
+       const end = new Date(b.break_end).getTime();
+       return acc + Math.round((end - start) / (1000 * 60));
+    }, 0);
+
+    return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">Mola Bitti ({totalFinishedDuration}dk)</span>;
   };
 
   return (
