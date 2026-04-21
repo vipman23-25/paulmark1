@@ -329,13 +329,31 @@ const CargoManagement = () => {
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                           <Pencil className="w-4 h-4 text-blue-500" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => {
-                          if (window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
-                            deleteMutation.mutate(item.id);
+                        {(() => {
+                          const arrivalDate = new Date(item.arrival_date || item.created_at);
+                          const today = new Date();
+                          const diffTime = today.getTime() - arrivalDate.getTime();
+                          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                          const isOld = diffDays > 15;
+
+                          if (isOld) {
+                            return (
+                              <Button variant="ghost" size="icon" disabled title="15 günden eski kayıtlar silinemez (Arşivlenmiştir)">
+                                <Trash2 className="w-4 h-4 text-muted-foreground opacity-30" />
+                              </Button>
+                            );
                           }
-                        }}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+
+                          return (
+                            <Button variant="ghost" size="icon" onClick={() => {
+                              if (window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+                                deleteMutation.mutate(item.id);
+                              }
+                            }}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   );
