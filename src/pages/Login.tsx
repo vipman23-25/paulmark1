@@ -23,18 +23,42 @@ const Login = () => {
 
     try {
       if (userType === 'personnel') {
-        const { data: foundPersonnel, error } = await supabase
+        const cleanUsername = username.trim();
+        const cleanPassword = password.trim();
+        
+        let { data: foundPersonnel, error } = await supabase
           .from('personnel')
           .select('*')
-          .eq('tc_no', username)
-          .eq('password_hash', password)
+          .eq('tc_no', cleanUsername)
           .eq('is_active', true)
           .maybeSingle();
 
-        if (foundPersonnel) {
-          setMockUser({
-            isAdmin: false,
-            email: foundPersonnel.tc_no,
+        // Auto-retry once for Supabase lock collision
+        if (error && error.message && error.message.includes('stole it')) {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('lock:sb-') || key.startsWith('sb-')) {
+              localStorage.removeItem(key);
+            }
+          });
+          await supabase.auth.signOut().catch(() => {});
+          await new Promise(r => setTimeout(r, 500));
+          
+          const retry = await supabase.from('personnel').select('*').eq('tc_no', cleanUsername).eq('is_active', true).maybeSingle();
+          foundPersonnel = retry.data;
+          error = retry.error;
+        }
+
+        if (error) {
+          console.error("Supabase error during personnel login:", error);
+          toast.error(`Sistem hatası: ${error.message}`);
+          setIsLoading(false);
+          return;
+        }
+
+        if (foundPersonnel && cleanPassword === foundPersonnel.password_hash) {
+          setMockUser({ 
+            isAdmin: false, 
+            email: foundPersonnel.tc_no, 
             id: foundPersonnel.id,
             name: `${foundPersonnel.first_name} ${foundPersonnel.last_name}`
           });
@@ -43,37 +67,26 @@ const Login = () => {
         } else {
           toast.error('Kullanıcı adı veya şifre hatalı veya hesabınız pasif!');
         }
-      } else if (userType === 'admin') {
-        const { data: adminSettings, error } = await supabase
-          .from('system_settings' as any)
-          .select('setting_value')
-          .eq('setting_key', 'admin_credentials')
-          .maybeSingle();
+        setIsLoading(false);
+        return;
+      }
 
-        let isValidAdmin = false;
+      const email = username.includes('@') ? username : `${username}@paulmark.com`;
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
 
-        if (!adminSettings) {
-          if (username === 'admin' && password === 'admin') {
-            isValidAdmin = true;
-            await supabase.from('system_settings' as any).insert({
-              setting_key: 'admin_credentials',
-              setting_value: { username: 'admin', password: 'admin' }
-            });
-          }
-        } else {
-          const creds: any = adminSettings.setting_value;
-          if (username === creds.username && password === creds.password) {
-            isValidAdmin = true;
-          }
-        }
+      if (error) {
+        throw error;
+      }
 
-        if (isValidAdmin) {
-          setMockUser({ isAdmin: true, email: 'admin@example.com', name: 'Admin', id: 'admin-1' });
-          toast.success('Admin girişi başarılı!');
-          navigate('/');
-        } else {
-          toast.error('Admin bilgileri hatalı!');
-        }
+      if (data.session) {
+        toast.success('Giriş başarılı!');
+        navigate('/');
+      } else {
+        toast.error('Giriş yapılamadı.');
       }
     } catch (error: any) {
       toast.error(error.message || 'Giriş sırasında hata oluştu');

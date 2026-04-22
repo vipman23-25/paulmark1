@@ -40,6 +40,16 @@ const DayOffView = () => {
     refetchInterval: 3000
   });
 
+  const { data: shiftPreferences = [], isLoading: spLoading } = useQuery({
+    queryKey: ['shift_preferences'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shift_preferences' as any).select('*');
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 3000
+  });
+
   const upsertMutation = useMutation({
     mutationFn: async ({ personnel_id, day_of_week, description, requested_shift, admin_response, status }: { personnel_id: string, day_of_week: number, description?: string, requested_shift?: string, admin_response?: string, status?: string }) => {
       await supabase.from('weekly_day_off').delete().eq('personnel_id', personnel_id);
@@ -98,7 +108,19 @@ const DayOffView = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
-      toast.success('Talep durumu güncellendi');
+      toast.success('İzin durumu güncellendi');
+    }
+  });
+
+  const updatePreferenceStatusMutation = useMutation({
+    mutationFn: async ({ id, status, admin_response }: { id: string, status: string, admin_response?: string }) => {
+      const payload: any = { status, admin_response };
+      const { error } = await supabase.from('shift_preferences' as any).update(payload).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shift_preferences'] });
+      toast.success('Vardiya tercihi durumu güncellendi');
     }
   });
 
@@ -130,19 +152,20 @@ const DayOffView = () => {
     setIsOpen(true);
   };
 
-  const isLoading = pLoading || wLoading;
+  const isLoading = pLoading || wLoading || spLoading;
 
   // Merge personnel with their day offs for display
   const data = personnel.map(p => ({
     ...p,
-    weeklyDayOffs: weeklyDayOffs.filter(d => d.personnel_id === p.id)
+    weeklyDayOffs: weeklyDayOffs.filter(d => d.personnel_id === p.id),
+    shiftPreference: shiftPreferences.find((d:any) => d.personnel_id === p.id)
   }));
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Calendar className="h-6 w-6" /> İzin Günleri Yönetimi
+          <Calendar className="h-6 w-6" /> İzin ve Vardiya Tercihleri Yönetimi
         </h2>
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Yenile">
@@ -217,7 +240,6 @@ const DayOffView = () => {
                   <TableHead>Personel</TableHead>
                   <TableHead>Departman</TableHead>
                   <TableHead>İzin Günü</TableHead>
-                  <TableHead>Vardiya İsteği</TableHead>
                   <TableHead>Açıklama</TableHead>
                   <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
@@ -225,9 +247,9 @@ const DayOffView = () => {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground animate-pulse">Veriler yükleniyor...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground animate-pulse">Veriler yükleniyor...</TableCell></TableRow>
                 ) : data.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Aktif personel bulunamadı</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Aktif personel bulunamadı</TableCell></TableRow>
                 ) : data.map(p => (
                   <TableRow key={p.id}>
                     <TableCell>
@@ -246,16 +268,6 @@ const DayOffView = () => {
                           <Badge key={d.id} variant="secondary">{DAYS[d.day_of_week] || 'Bilinmiyor'}</Badge>
                         )) : <span className="text-muted-foreground">Seçilmemiş</span>}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {p.weeklyDayOffs.length > 0 ? (
-                        (() => {
-                           const req = (p.weeklyDayOffs[0] as any).requested_shift;
-                           if (req === 'sabah') return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200">Sabah İstiyor</Badge>
-                           if (req === 'aksam') return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200">Akşam İstiyor</Badge>
-                           return <span className="text-xs text-muted-foreground italic">Seçilmedi</span>;
-                        })()
-                      ) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell>
                        {p.weeklyDayOffs.length > 0 && p.weeklyDayOffs[0].description ? (
@@ -305,6 +317,68 @@ const DayOffView = () => {
                     </TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Shift Preferences Table */}
+      <Card className="glass-card mt-6 border-indigo-100 dark:border-indigo-900/30">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-indigo-600 dark:text-indigo-400">Personel Vardiya Tercihleri</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Personel</TableHead>
+                  <TableHead>Departman</TableHead>
+                  <TableHead>Tercih Edilen Gün</TableHead>
+                  <TableHead>Vardiya Tercihi</TableHead>
+                  <TableHead>Durum</TableHead>
+                  <TableHead className="text-right">İşlemler</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground animate-pulse">Veriler yükleniyor...</TableCell></TableRow>
+                ) : data.filter(p => p.shiftPreference).length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Vardiya tercihi yapan personel bulunamadı.</TableCell></TableRow>
+                ) : data.filter(p => p.shiftPreference).map(p => {
+                  const sp = p.shiftPreference as any;
+                  return (
+                  <TableRow key={`sp-${p.id}`}>
+                    <TableCell className="font-medium">{p.first_name} {p.last_name}</TableCell>
+                    <TableCell>{p.department}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{DAYS[sp.day_of_week] || 'Bilinmiyor'}</Badge>
+                    </TableCell>
+                    <TableCell>
+                       {sp.requested_shift === 'sabah' ? <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200">Sabah İstiyor</Badge> : <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200">Akşam İstiyor</Badge>}
+                    </TableCell>
+                    <TableCell>
+                       {sp.status === 'approved' ? <Badge className="bg-green-100 text-green-800 border-none">Onaylandı</Badge> : sp.status === 'rejected' ? <Badge className="bg-red-100 text-red-800 border-none">Reddedildi</Badge> : <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 animate-pulse">Bekliyor</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1 flex-wrap">
+                        {sp.status === 'pending' && (
+                           <>
+                             <Button size="sm" variant="outline" className="bg-green-50 hover:bg-green-100 text-green-700 h-8 px-2" onClick={() => updatePreferenceStatusMutation.mutate({ id: sp.id, status: 'approved' })}>Onayla</Button>
+                             <Button size="sm" variant="outline" className="bg-red-50 hover:bg-red-100 text-red-700 h-8 px-2" onClick={() => {
+                               const rationale = window.prompt("Reddetme sebebi?");
+                               if (rationale !== null) updatePreferenceStatusMutation.mutate({ id: sp.id, status: 'rejected', admin_response: rationale });
+                             }}>Reddet</Button>
+                           </>
+                        )}
+                        {sp.status !== 'pending' && (
+                           <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => updatePreferenceStatusMutation.mutate({ id: sp.id, status: 'pending', admin_response: '' })}>Beklemeye Al</Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )})}
               </TableBody>
             </Table>
           </div>

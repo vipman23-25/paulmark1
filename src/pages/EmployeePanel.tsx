@@ -44,7 +44,8 @@ const EmployeePanel = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dayOffDescription, setDayOffDescription] = useState('');
-  const [requestedShift, setRequestedShift] = useState('farketmez');
+  const [shiftPrefDay, setShiftPrefDay] = useState('');
+  const [shiftPrefTime, setShiftPrefTime] = useState('sabah');
   const [isLogisticsOpen, setIsLogisticsOpen] = useState(false);
   const [logisticsForm, setLogisticsForm] = useState({
     company_name: '',
@@ -120,17 +121,19 @@ const EmployeePanel = () => {
         { data: allDepartmentSalesTargets },
         { data: shipments },
         { data: logistics },
-        { data: cargoCompanies }
+        { data: cargoCompanies },
+        { data: shiftPreference }
       ] = await Promise.all([
         supabase.from('weekly_day_off').select('*').eq('personnel_id', personnel.id),
         supabase.from('break_records').select('*').eq('personnel_id', personnel.id),
         supabase.from('overtime_records').select('*').eq('personnel_id', personnel.id),
         supabase.from('personnel_movements').select('*').eq('personnel_id', personnel.id).order('start_date', { ascending: false }),
-        (supabase.from('reminders').select('*').eq('is_active', true).order('reminder_date', { ascending: true }) as any),
-        (supabase.from('sales_targets' as any).select('*, personnel!inner(department)').eq('personnel.department', personnel.department || 'Bilinmiyor').eq('target_month', currentMonth) as any),
+        supabase.from('reminders').select('*').eq('is_active', true).order('reminder_date', { ascending: true }) as any,
+        supabase.from('sales_targets' as any).select('*, personnel!inner(department)').eq('personnel.department', personnel.department || 'Bilinmiyor').eq('target_month', currentMonth) as any,
         supabase.from('cargo_shipments' as any).select('*').order('arrival_date', { ascending: true }),
         supabase.from('logistics_records' as any).select('*').order('shipment_date', { ascending: false }),
-        supabase.from('cargo_companies' as any).select('*').order('created_at', { ascending: true })
+        supabase.from('cargo_companies' as any).select('*').order('created_at', { ascending: true }),
+        supabase.from('shift_preferences' as any).select('*').eq('personnel_id', personnel.id).maybeSingle()
       ]);
       
       const [
@@ -220,7 +223,8 @@ const EmployeePanel = () => {
         colleagueBreaks: colleagueBreaks || [],
         colleagueMovements: colleagueMovements || [],
         colleagueDayOffs: colleagueDayOffs || [],
-        genderRules: genderRules || []
+        genderRules: genderRules || [],
+        shiftPreference
       };
     },
     enabled: !!personnel?.id,
@@ -336,13 +340,13 @@ const EmployeePanel = () => {
   });
 
   const toggleDayMutation = useMutation({
-    mutationFn: async ({ day, isSelected, allIds, description, reqShift }: { day: number, isSelected: boolean, allIds: string[], description?: string, reqShift?: string }) => {
+    mutationFn: async ({ day, isSelected, allIds, description }: { day: number, isSelected: boolean, allIds: string[], description?: string }) => {
       if (allIds.length > 0) {
         const { error: delErr } = await supabase.from('weekly_day_off').delete().in('id', allIds);
         if (delErr) throw delErr;
       }
       if (!isSelected) {
-        const payload: any = { personnel_id: personnel.id, day_of_week: day, description, requested_shift: reqShift, status: 'pending' };
+        const payload: any = { personnel_id: personnel.id, day_of_week: day, description, status: 'pending' };
         const { error: insErr } = await supabase.from('weekly_day_off').insert(payload);
         if (insErr) throw insErr;
         return { deleted: false };
@@ -357,6 +361,30 @@ const EmployeePanel = () => {
       console.error("Day Off Error:", error);
       toast.error('İzin günü ayarlanamadı: ' + (error.message || 'Bilinmeyen hata'));
     }
+  });
+
+  const shiftPreferenceMutation = useMutation({
+    mutationFn: async ({ day_of_week, requested_shift }: { day_of_week: number, requested_shift: string }) => {
+      await supabase.from('shift_preferences' as any).delete().eq('personnel_id', personnel.id);
+      
+      if (day_of_week) {
+         const { error } = await supabase.from('shift_preferences' as any).insert({
+            personnel_id: personnel.id,
+            day_of_week,
+            requested_shift,
+            status: 'pending'
+         });
+         if (error) throw error;
+         return 'added';
+      }
+      return 'deleted';
+    },
+    onSuccess: (status) => {
+       queryClient.invalidateQueries({ queryKey: ['employee_dashboard', personnel?.id] });
+       if (status === 'added') toast.success('Vardiya tercihiniz onaya gönderildi!');
+       else toast.success('Vardiya tercihiniz iptal edildi.');
+    },
+    onError: (err: any) => toast.error('Vardiya tercihi kaydedilemedi: ' + err.message)
   });
 
   const startBreakMutation = useMutation({
@@ -393,9 +421,12 @@ const EmployeePanel = () => {
   useEffect(() => {
     if (dashboardData?.weeklyDayOffs && dashboardData.weeklyDayOffs.length > 0) {
       setDayOffDescription(dashboardData.weeklyDayOffs[0].description || '');
-      setRequestedShift(dashboardData.weeklyDayOffs[0].requested_shift || 'farketmez');
     }
-  }, [dashboardData?.weeklyDayOffs]);
+    if (dashboardData?.shiftPreference) {
+       setShiftPrefDay(dashboardData.shiftPreference.day_of_week.toString());
+       setShiftPrefTime(dashboardData.shiftPreference.requested_shift);
+    }
+  }, [dashboardData?.weeklyDayOffs, dashboardData?.shiftPreference]);
 
   if (loadingPersonnel || loadingData) {
     return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
@@ -493,7 +524,7 @@ const EmployeePanel = () => {
       }
     }
 
-    toggleDayMutation.mutate({ day, isSelected, allIds, description: dayOffDescription, reqShift: requestedShift });
+    toggleDayMutation.mutate({ day, isSelected, allIds, description: dayOffDescription });
   };
 
   const { months, days } = calculateWorkDuration(personnel.start_date);
@@ -666,33 +697,7 @@ const EmployeePanel = () => {
             )}
 
             {(features.showMovements || features.showReminders) && (
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-4 ${(features.showOvertime || features.showBreakViolations || features.showLeaveStatus || features.showSalesTargets) ? 'border-t' : 'mt-0 pt-0'}`}>
-              {features.showMovements && (
-              <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                <div className="flex items-center gap-2 mb-3 text-primary"><MapPin className="h-4 w-4" /><h3 className="font-semibold text-sm">Son Kişisel Hareketleriniz</h3></div>
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                  {movements.length > 0 ? movements.slice(0, 5).map((m: any) => {
-                    const isValidStart = m.start_date && !isNaN(new Date(m.start_date).getTime());
-                    const isValidEnd = m.end_date && !isNaN(new Date(m.end_date).getTime());
-                    return (
-                    <div key={m.id} className="flex justify-between items-center bg-background border p-2 rounded-md text-xs">
-                       <div>
-                         <span className="font-medium text-foreground block">{m.type || m.movement_type || 'Belirtilmemiş'}</span>
-                         <span className="text-muted-foreground">
-                           {isValidStart ? format(new Date(m.start_date), 'dd.MM.yyyy') : '-'} 
-                           {' - '}
-                           {isValidEnd ? format(new Date(m.end_date), 'dd.MM.yyyy') : '-'}
-                         </span>
-                       </div>
-                       <Badge variant="outline">{m.total_days} Gün</Badge>
-                    </div>
-                  )}) : (
-                    <div className="p-3 bg-muted/20 text-center rounded text-xs text-muted-foreground">Kayıtlı kişisel hareket bulunamadı.</div>
-                  )}
-                </div>
-              </div>
-              )}
-
+            <div className={`grid grid-cols-1 gap-4 mt-6 pt-4 ${(features.showOvertime || features.showBreakViolations || features.showLeaveStatus || features.showSalesTargets) ? 'border-t' : 'mt-0 pt-0'}`}>
               {features.showReminders && (
               <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
                 <div className="flex items-center gap-2 mb-3 text-indigo-500"><Bell className="h-4 w-4" /><h3 className="font-semibold text-sm">Duyurular ve Görevler</h3></div>
@@ -749,6 +754,32 @@ const EmployeePanel = () => {
                 </div>
               </div>
               )}
+
+              {features.showMovements && (
+              <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-3 text-primary"><MapPin className="h-4 w-4" /><h3 className="font-semibold text-sm">Son Kişisel Hareketleriniz</h3></div>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {movements.length > 0 ? movements.slice(0, 5).map((m: any) => {
+                    const isValidStart = m.start_date && !isNaN(new Date(m.start_date).getTime());
+                    const isValidEnd = m.end_date && !isNaN(new Date(m.end_date).getTime());
+                    return (
+                    <div key={m.id} className="flex justify-between items-center bg-background border p-2 rounded-md text-xs">
+                       <div>
+                         <span className="font-medium text-foreground block">{m.type || m.movement_type || 'Belirtilmemiş'}</span>
+                         <span className="text-muted-foreground">
+                           {isValidStart ? format(new Date(m.start_date), 'dd.MM.yyyy') : '-'} 
+                           {' - '}
+                           {isValidEnd ? format(new Date(m.end_date), 'dd.MM.yyyy') : '-'}
+                         </span>
+                       </div>
+                       <Badge variant="outline">{m.total_days} Gün</Badge>
+                    </div>
+                  )}) : (
+                    <div className="p-3 bg-muted/20 text-center rounded text-xs text-muted-foreground">Kayıtlı kişisel hareket bulunamadı.</div>
+                  )}
+                </div>
+              </div>
+              )}
             </div>
             )}
           </CardContent>
@@ -770,21 +801,9 @@ const EmployeePanel = () => {
             <div className="space-y-4">
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Vardiya Tercihiniz (İsteğe bağlı)</Label>
-                  <select 
-                    value={requestedShift}
-                    onChange={(e) => setRequestedShift(e.target.value)}
-                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background/50 px-3 py-2 text-sm transition-colors focus:bg-background"
-                  >
-                    <option value="farketmez">Farketmez (Sistem Belirlesin)</option>
-                    <option value="sabah">Sabah Vardiyasında Olmak İstiyorum</option>
-                    <option value="aksam">Akşam Vardiyasında Olmak İstiyorum</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
                   <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Notunuz (İsteğe bağlı)</Label>
                   <Input 
-                    placeholder="Örn: Cuma sabahçı olmak istiyorum çünkü..." 
+                    placeholder="Örn: Cuma günü hastane işim var..." 
                     value={dayOffDescription} 
                     onChange={(e) => setDayOffDescription(e.target.value)}
                     className="bg-muted/50 focus:bg-background transition-colors"
@@ -792,24 +811,128 @@ const EmployeePanel = () => {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+                <div className="sm:col-span-12 pb-2">
+                  <p className="text-sm font-medium text-muted-foreground ml-1">Yukarıdaki ayarlarınızla birlikte İzin Gününüzü onaylayın:</p>
+                </div>
                 {DAYS.slice(1, 6).map((day, idx) => {
                   const i = idx + 1;
                   const isSelected = selectedDays.includes(i);
-                  const isDisabled = toggleDayMutation.isPending;
+                  const isPending = isSelected && (weeklyDayOffs[0] as any)?.status === 'pending';
+                  const isRejected = isSelected && (weeklyDayOffs[0] as any)?.status === 'rejected';
+                  const isApproved = isSelected && (weeklyDayOffs[0] as any)?.status === 'approved';
                   
                   return (
                     <Button 
-                      key={i} 
-                      variant={isSelected ? 'default' : 'outline'} 
-                      onClick={() => toggleDay(i)} 
-                      disabled={isDisabled} 
-                      className={`w-full ${isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
+                      key={day} 
+                      variant={isSelected ? "default" : "outline"}
+                      className={`h-12 relative overflow-hidden ${isSelected ? (isPending ? 'bg-orange-500 hover:bg-orange-600 text-white border-none' : isRejected ? 'bg-red-500 hover:bg-red-600 text-white border-none' : 'bg-primary') : 'hover:border-primary/50'}`}
+                      onClick={() => toggleDay(i)}
+                      disabled={toggleDayMutation.isPending}
                     >
                       {day}
+                      {isSelected && (
+                        <div className="absolute top-0 right-0 p-1">
+                          {isPending && <Clock className="w-3 h-3 opacity-70 animate-pulse" />}
+                          {isRejected && <Info className="w-3 h-3 opacity-70" title="Reddedildi" />}
+                          {isApproved && <UserCheck className="w-3 h-3 opacity-70" />}
+                        </div>
+                      )}
                     </Button>
                   );
                 })}
               </div>
+              {selectedDays.length > 0 && weeklyDayOffs[0]?.admin_response && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-lg border border-red-100 dark:border-red-900/30 text-sm">
+                  <span className="font-semibold block mb-1">Müdür Notu:</span>
+                  {weeklyDayOffs[0].admin_response}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        )}
+
+        {/* Shift Preference Selection */}
+        {features.showWeeklyDayOff && (
+        <Card className="glass-card border-indigo-100 dark:border-indigo-900/30 mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+              <CalendarDays className="h-5 w-5" /> Haftalık Vardiya Tercihi
+            </CardTitle>
+            <CardDescription>
+              Haftanın <span className="font-semibold text-indigo-500">sadece 1 günü için</span> vardiya tercihi yapabilirsiniz.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Tercih Edilen Gün</Label>
+                  <select 
+                    value={shiftPrefDay}
+                    onChange={(e) => setShiftPrefDay(e.target.value)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background/50 px-3 py-2 text-sm transition-colors focus:bg-background"
+                  >
+                    <option value="">-- Gün Seçiniz --</option>
+                    {DAYS.slice(1, 8).map((d, i) => (
+                      <option key={i+1} value={(i+1).toString()}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Vardiya Tercihiniz</Label>
+                  <select 
+                    value={shiftPrefTime}
+                    onChange={(e) => setShiftPrefTime(e.target.value)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background/50 px-3 py-2 text-sm transition-colors focus:bg-background"
+                    disabled={!shiftPrefDay}
+                  >
+                    <option value="sabah">Sabah Vardiyasında Olmak İstiyorum</option>
+                    <option value="aksam">Akşam Vardiyasında Olmak İstiyorum</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 pt-2">
+                <Button 
+                  onClick={() => shiftPreferenceMutation.mutate({ day_of_week: parseInt(shiftPrefDay), requested_shift: shiftPrefTime })}
+                  disabled={!shiftPrefDay || shiftPreferenceMutation.isPending}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  Tercihi Kaydet
+                </Button>
+                
+                {dashboardData?.shiftPreference && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => shiftPreferenceMutation.mutate({ day_of_week: 0, requested_shift: '' })}
+                    disabled={shiftPreferenceMutation.isPending}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    title="Tercihi İptal Et"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+
+              {dashboardData?.shiftPreference && (
+                <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+                      Aktif Tercihiniz: {DAYS[dashboardData.shiftPreference.day_of_week]} - {dashboardData.shiftPreference.requested_shift === 'sabah' ? 'Sabah' : 'Akşam'}
+                    </span>
+                    {dashboardData.shiftPreference.status === 'pending' && <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200 border-none animate-pulse">Onay Bekliyor</Badge>}
+                    {dashboardData.shiftPreference.status === 'approved' && <Badge className="bg-green-100 text-green-800 hover:bg-green-200 border-none">Onaylandı</Badge>}
+                    {dashboardData.shiftPreference.status === 'rejected' && <Badge className="bg-red-100 text-red-800 hover:bg-red-200 border-none">Reddedildi</Badge>}
+                  </div>
+                  {dashboardData.shiftPreference.admin_response && (
+                    <div className="mt-2 pt-2 border-t border-indigo-200/50 text-indigo-600 dark:text-indigo-400">
+                      <span className="font-semibold mr-1">Müdür Notu:</span>
+                      {dashboardData.shiftPreference.admin_response}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

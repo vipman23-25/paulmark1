@@ -75,13 +75,28 @@ const PersonnelManagement = () => {
   const { data: personnel = [], isLoading } = useQuery({
     queryKey: ['personnel'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('personnel')
         .select('*')
         .order('created_at', { ascending: false });
       
+      // Auto-retry once for Supabase lock collision
+      if (error && error.message && error.message.includes('stole it')) {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('lock:sb-') || key.startsWith('sb-')) {
+            localStorage.removeItem(key);
+          }
+        });
+        await new Promise(r => setTimeout(r, 500));
+        
+        const retry = await supabase.from('personnel').select('*').order('created_at', { ascending: false });
+        data = retry.data;
+        error = retry.error;
+      }
+      
       if (error) {
-        toast.error('Personel verileri çekilirken hata oluştu');
+        toast.error(`Personel verileri çekilirken hata oluştu: ${error.message}`);
+        console.error("Fetch error details:", error);
         throw error;
       }
       return data as Personnel[];

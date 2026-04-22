@@ -304,17 +304,33 @@ const CargoManagement = () => {
                       <TableCell>
                         <div className="max-h-[100px] overflow-y-auto space-y-1 pr-1 text-xs min-w-[150px]">
                           {item.cargo_shipment_logs && item.cargo_shipment_logs.length > 0 ? (
-                            item.cargo_shipment_logs
-                              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                              .map((log: any) => (
-                              <div key={log.id} className="bg-muted/50 p-1.5 rounded border-l-2 border-primary pl-2 mb-1">
-                                <span className="font-semibold text-foreground">{log.personnel_name}: </span>
-                                <span className={log.added_count > 0 ? 'text-success font-medium' : 'text-destructive font-medium'}>
-                                  {log.added_count > 0 ? `+${log.added_count}` : log.added_count}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground ml-1">({format(new Date(log.created_at), 'dd.MM HH:mm', { locale: tr })})</span>
-                              </div>
-                            ))
+                            (() => {
+                              // Aggregate logs by personnel_name
+                              const aggregated = item.cargo_shipment_logs.reduce((acc: any, log: any) => {
+                                if (!acc[log.personnel_name]) {
+                                  acc[log.personnel_name] = { total: 0, latest: log.created_at };
+                                }
+                                acc[log.personnel_name].total += Number(log.added_count || 0);
+                                if (new Date(log.created_at).getTime() > new Date(acc[log.personnel_name].latest).getTime()) {
+                                  acc[log.personnel_name].latest = log.created_at;
+                                }
+                                return acc;
+                              }, {});
+                              
+                              return Object.entries(aggregated)
+                                .map(([name, data]: [string, any]) => ({ personnel_name: name, added_count: data.total, created_at: data.latest }))
+                                .filter(log => log.added_count !== 0)
+                                .sort((a, b) => b.added_count - a.added_count)
+                                .map((log: any, i: number) => (
+                                  <div key={i} className="bg-muted/50 p-1.5 rounded border-l-2 border-primary pl-2 mb-1">
+                                    <span className="font-semibold text-foreground">{log.personnel_name}: </span>
+                                    <span className={log.added_count > 0 ? 'text-success font-medium' : 'text-destructive font-medium'}>
+                                      {log.added_count > 0 ? `+${log.added_count}` : log.added_count} Koli
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground ml-1" title="Son İşlem Zamanı">({format(new Date(log.created_at), 'dd.MM HH:mm', { locale: tr })})</span>
+                                  </div>
+                                ));
+                            })()
                           ) : (
                             <span className="text-muted-foreground text-xs italic">Kayıt yok</span>
                           )}

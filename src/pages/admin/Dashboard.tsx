@@ -174,8 +174,9 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                 else shifts[adSoyad].category = 'Diğer';
                 
                 if (rawVal.includes('+')) {
-                    if (rawVal.toLowerCase().includes('depo')) shifts[adSoyad].hasDepo = true;
-                    if (rawVal.toLowerCase().includes('mutfak')) shifts[adSoyad].hasMutfak = true;
+                    const rawLower = rawVal.toLowerCase();
+                    if (rawLower.includes('depo') || rawLower.includes('+d')) shifts[adSoyad].hasDepo = true;
+                    if (rawLower.includes('mutfak') || rawLower.includes('+m')) shifts[adSoyad].hasMutfak = true;
                 }
             }
         } else if (isDepoRow) {
@@ -194,14 +195,15 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
         if (cat === 'Belirsiz') return;
 
         let extra = '';
-        if (data.hasMutfak && !data.shiftVal.toLowerCase().includes('mutfak')) extra += ' + Mutfak Temizliği';
-        if (data.hasDepo && !data.shiftVal.toLowerCase().includes('depo')) extra += ' + Depo Çalışması';
+        if (data.hasMutfak) extra += '+M';
+        if (data.hasDepo) extra += '+D';
         
         if (data.shiftVal.includes('+')) {
           const splitPos = data.shiftVal.indexOf('+');
           const customExtra = data.shiftVal.substring(splitPos);
-          if (!customExtra.toLowerCase().includes('mutfak') && !customExtra.toLowerCase().includes('depo')) {
-             extra += ' ' + customExtra;
+          const ceLower = customExtra.toLowerCase();
+          if (!ceLower.includes('mutfak') && !ceLower.includes('depo') && ceLower !== '+m' && ceLower !== '+d') {
+             extra += customExtra;
           }
         }
 
@@ -271,7 +273,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Sabah'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        <span className="truncate pr-1 leading-tight">{p}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -286,7 +288,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Akşam'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        <span className="truncate pr-1 leading-tight">{p}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -301,7 +303,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['İzinli'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        <span className="truncate pr-1 leading-tight">{p}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -316,7 +318,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Ek Görev (Sınıflandırılmamış Shift)'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p.replace(/\+/g, ' + ')}</span>
+                        <span className="truncate pr-1 leading-tight">{p}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}

@@ -52,41 +52,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Development mode: Use mock user instead of Supabase
-    const MOCK_MODE = true; // Set to false to enable real Supabase auth
-    
-    if (MOCK_MODE) {
-      const savedUserStr = localStorage.getItem('mock_user_session');
-      if (savedUserStr) {
-        try {
-          const parsedUser = JSON.parse(savedUserStr);
-          setUser(parsedUser);
-          setIsAdmin(parsedUser.user_metadata?.display_name === 'Admin');
-        } catch(e) {}
-      }
-      // Initialize with loading false - allow user to login
-      setIsLoading(false);
-      return;
+    // Initial mock session check
+    const savedUserStr = localStorage.getItem('mock_user_session');
+    let hasMockSession = false;
+    if (savedUserStr) {
+      try {
+        const parsedUser = JSON.parse(savedUserStr);
+        setUser(parsedUser);
+        setIsAdmin(parsedUser.user_metadata?.display_name === 'Admin');
+        hasMockSession = true;
+      } catch(e) {}
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
         if (session?.user) {
-          setTimeout(() => checkRole(session.user.id), 0);
+          setSession(session);
+          setUser(session.user);
+          await checkRole(session.user.id);
         } else {
           setIsAdmin(false);
+          if (!localStorage.getItem('mock_user_session')) {
+            setUser(null);
+          }
         }
         setIsLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        checkRole(session.user.id);
+        setSession(session);
+        setUser(session.user);
+        await checkRole(session.user.id);
       }
       setIsLoading(false);
     });
@@ -103,15 +101,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    const MOCK_MODE = true;
-    if (MOCK_MODE) {
-      setUser(null);
-      localStorage.removeItem('mock_user_session');
-      setSession(null);
-      setIsAdmin(false);
-      return;
-    }
-    await supabase.auth.signOut();
+    localStorage.removeItem('mock_user_session');
+    try {
+      await supabase.auth.signOut();
+    } catch(e) {}
+    setUser(null);
+    setSession(null);
+    setIsAdmin(false);
   };
 
   return (
