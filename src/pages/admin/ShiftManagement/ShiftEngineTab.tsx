@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -64,7 +64,16 @@ const ShiftEngineTab = () => {
     const weekDates = getWeekDates(selectedWeekStart);
     const newGrid: any[] = [];
 
-    const depts = Array.from(new Set(engineContext.personnel.map(p => p.department)));
+    const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
+    const depts = Array.from(new Set(engineContext.personnel.map((p: any) => p.department)));
+    depts.sort((a, b) => {
+      let ia = targetOrder.indexOf(a);
+      let ib = targetOrder.indexOf(b);
+      if (ia === -1) ia = 999;
+      if (ib === -1) ib = 999;
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b);
+    });
 
     depts.forEach(dept => {
       const deptStaff = engineContext.personnel.filter(p => p.department === dept);
@@ -157,15 +166,29 @@ const ShiftEngineTab = () => {
   const generateExcel = () => {
     if (!isGenerated) return;
     const weekDates = getWeekDates(selectedWeekStart);
-    const exportData = generatedGrid.map(row => {
-      const obj: any = {
-        'Departman': row.department,
-        'Ad Soyad': row.adSoyad
-      };
-      weekDates.forEach((dateStr, i) => {
-        obj[`${DAYS[i]} (${dateStr})`] = row.shifts[dateStr];
-      });
-      return obj;
+    const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
+    const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
+    currentDepts.sort((a, b) => {
+      let ia = targetOrder.indexOf(a);
+      let ib = targetOrder.indexOf(b);
+      if (ia === -1) ia = 999;
+      if (ib === -1) ib = 999;
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b);
+    });
+    
+    // We can also inject summary rows into the export
+    const exportData: any[] = [];
+    currentDepts.forEach(dept => {
+        const deptRows = generatedGrid.filter(r => r.department === dept);
+        deptRows.forEach(row => {
+          const obj: any = { 'Departman': row.department, 'Ad Soyad': row.adSoyad };
+          weekDates.forEach((dateStr, i) => { obj[`${DAYS[i]} (${dateStr})`] = row.shifts[dateStr]; });
+          exportData.push(obj);
+        });
+        
+        // Emtpy row separator for Excel clarity
+        exportData.push({});
     });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -233,36 +256,80 @@ const ShiftEngineTab = () => {
                           </TableRow>
                        </TableHeader>
                        <TableBody>
-                          {generatedGrid.map((row, rIdx) => (
-                              <TableRow key={row.personnel_id} className={rIdx % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
-                                  <TableCell className="font-semibold border-r">{row.adSoyad}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground border-r">{row.department}</TableCell>
-                                  {getWeekDates(selectedWeekStart).map(dateStr => {
-                                      const val = row.shifts[dateStr] || '';
-                                      return (
-                                          <TableCell key={dateStr} className="p-1">
-                                              <select 
-                                                className={`w-full h-full text-center p-2 rounded outline-none font-bold text-xs ring-1 ring-inset ${val.startsWith('S') ? 'bg-yellow-50 text-yellow-700 ring-yellow-200' : val.startsWith('A') ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : val === 'İ' ? 'bg-green-50 text-green-700 ring-green-200' : val === 'R' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-transparent ring-border'}`}
-                                                value={val}
-                                                onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
-                                              >
-                                                <option value="S">S - Sabah</option>
-                                                <option value="A">A - Akşam</option>
-                                                <option value="S+M">S+M - Sabah Mutfak</option>
-                                                <option value="A+M">A+M - Akşam Mutfak</option>
-                                                <option value="S+D">S+D - Sabah Depo</option>
-                                                <option value="A+D">A+D - Akşam Depo</option>
-                                                <option value="S+M+D">S+M+D - Sb. Mutf. Depo</option>
-                                                <option value="İ">İ - İzin</option>
-                                                <option value="R">R - Raporlu</option>
-                                                <option value="O">O - Ortak</option>
-                                                <option value="-">-</option>
-                                              </select>
-                                          </TableCell>
-                                      );
-                                  })}
-                              </TableRow>
-                          ))}
+                          {(() => {
+                            const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
+                            const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
+                            currentDepts.sort((a, b) => {
+                              let ia = targetOrder.indexOf(a);
+                              let ib = targetOrder.indexOf(b);
+                              if (ia === -1) ia = 999;
+                              if (ib === -1) ib = 999;
+                              if (ia !== ib) return ia - ib;
+                              return a.localeCompare(b);
+                            });
+
+                            return currentDepts.map((dept, deptIdx) => {
+                                const deptRows = generatedGrid.filter(r => r.department === dept);
+                                if (deptRows.length === 0) return null;
+
+                                const dailyTotals = getWeekDates(selectedWeekStart).map(dateStr => {
+                                    let sabahCount = 0;
+                                    let aksamCount = 0;
+                                    deptRows.forEach(r => {
+                                        const val = r.shifts[dateStr] || '';
+                                        if (val.startsWith('S')) sabahCount++;
+                                        else if (val.startsWith('A')) aksamCount++;
+                                    });
+                                    return { sabah: sabahCount, aksam: aksamCount };
+                                });
+
+                                return (
+                                  <Fragment key={dept}>
+                                      {deptRows.map((row, rIdx) => (
+                                          <TableRow key={row.personnel_id} className={rIdx % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
+                                              <TableCell className="font-semibold border-r">{row.adSoyad}</TableCell>
+                                              <TableCell className="text-xs text-muted-foreground border-r">{row.department}</TableCell>
+                                              {getWeekDates(selectedWeekStart).map(dateStr => {
+                                                  const val = row.shifts[dateStr] || '';
+                                                  return (
+                                                      <TableCell key={dateStr} className="p-1 border-r border-border/50">
+                                                          <select 
+                                                            className={`w-full h-full text-center p-2 rounded outline-none font-bold text-xs ring-1 ring-inset ${val.startsWith('S') ? 'bg-yellow-50 text-yellow-700 ring-yellow-200' : val.startsWith('A') ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : val === 'İ' ? 'bg-green-50 text-green-700 ring-green-200' : val === 'R' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-transparent ring-border'}`}
+                                                            value={val}
+                                                            onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
+                                                          >
+                                                            <option value="S">S - Sabah</option>
+                                                            <option value="A">A - Akşam</option>
+                                                            <option value="S+M">S+M - Sabah Mutfak</option>
+                                                            <option value="A+M">A+M - Akşam Mutfak</option>
+                                                            <option value="S+D">S+D - Sabah Depo</option>
+                                                            <option value="A+D">A+D - Akşam Depo</option>
+                                                            <option value="S+M+D">S+M+D - Sb. Mutf. Depo</option>
+                                                            <option value="İ">İ - İzin</option>
+                                                            <option value="R">R - Raporlu</option>
+                                                            <option value="O">O - Ortak</option>
+                                                            <option value="-">-</option>
+                                                          </select>
+                                                      </TableCell>
+                                                  );
+                                              })}
+                                          </TableRow>
+                                      ))}
+                                      {/* Seperator & Summary Row */}
+                                      <TableRow className="bg-primary/5 hover:bg-primary/5 font-semibold">
+                                          <TableCell colSpan={2} className="text-right border-r border-b-4 border-b-primary/20 text-xs">Günlük ({dept}) Toplamı:</TableCell>
+                                          {dailyTotals.map((totals, i) => (
+                                              <TableCell key={i} className="text-center p-2 border-r border-b-4 border-b-primary/20">
+                                                  <div className="flex flex-col gap-1 items-center justify-center">
+                                                     <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full whitespace-nowrap">{totals.sabah}/S - {totals.aksam}/A</span>
+                                                  </div>
+                                              </TableCell>
+                                          ))}
+                                      </TableRow>
+                                  </Fragment>
+                                );
+                            });
+                          })()}
                        </TableBody>
                     </Table>
                  </div>
