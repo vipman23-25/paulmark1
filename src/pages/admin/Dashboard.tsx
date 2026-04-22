@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Clock, MapPin, Zap, Package, CalendarDays, Settings } from 'lucide-react';
+import { Clock, MapPin, Zap, Package, CalendarDays, Settings, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from 'recharts';
@@ -20,7 +20,8 @@ const Dashboard = () => {
       showDailyBreaks: true,
       showMovements: true,
       showCargoStatus: true,
-      showOvertimes: true
+      showOvertimes: true,
+      showReminders: true
     };
   });
 
@@ -40,7 +41,8 @@ const Dashboard = () => {
         { data: dayOffs },
         { data: overtimes },
         { data: shipments },
-        { data: settingsData }
+        { data: settingsData },
+        { data: reminders }
       ] = await Promise.all([
         supabase.from('personnel').select('*'),
         supabase.from('break_records').select('*'),
@@ -48,7 +50,8 @@ const Dashboard = () => {
         supabase.from('weekly_day_off').select('*'),
         supabase.from('overtime_records').select('*'),
         supabase.from('cargo_shipments').select('*'),
-        supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').maybeSingle()
+        supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').maybeSingle(),
+        supabase.from('reminders').select('*').eq('is_active', true)
       ]);
       return { 
         personnel: personnel || [], 
@@ -57,7 +60,8 @@ const Dashboard = () => {
         dayOffs: dayOffs || [], 
         overtimes: overtimes || [],
         shipments: shipments || [],
-        weeklySchedule: settingsData?.setting_value?.weeklySchedule || []
+        weeklySchedule: settingsData?.setting_value?.weeklySchedule || [],
+        reminders: reminders || []
       };
     },
     refetchInterval: 30000
@@ -67,7 +71,7 @@ const Dashboard = () => {
     return <div className="p-8 text-center text-muted-foreground animate-pulse">Dashboard yükleniyor...</div>;
   }
 
-  const { personnel, breaks, movements, dayOffs, overtimes, shipments, weeklySchedule } = data;
+  const { personnel, breaks, movements, dayOffs, overtimes, shipments, weeklySchedule, reminders } = data;
   const activePersonnel = personnel.filter(p => p.is_active);
   const onBreakRecords = breaks.filter(b => b.break_end === null);
 
@@ -87,8 +91,9 @@ const Dashboard = () => {
             <DropdownMenuCheckboxItem checked={visibility.showActiveBreaks} onCheckedChange={() => toggleVis('showActiveBreaks')}>Aktif Molada Olanlar</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showDailyBreaks} onCheckedChange={() => toggleVis('showDailyBreaks')}>Günlük Mola Dağılımı</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showMovements} onCheckedChange={() => toggleVis('showMovements')}>İzin ve Rapor Durumları</DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={visibility.showCargoStatus} onCheckedChange={() => toggleVis('showCargoStatus')}>Kargo Takip Durumu</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showCargoStatus} onCheckedChange={() => toggleVis('showCargoStatus')}>Koli Sevkiyat</DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={visibility.showOvertimes} onCheckedChange={() => toggleVis('showOvertimes')}>Fazla Mesailer</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={visibility.showReminders} onCheckedChange={() => toggleVis('showReminders')}>Duyurular</DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -100,6 +105,7 @@ const Dashboard = () => {
       {visibility.showMovements && <MovementsCard movements={movements} personnel={activePersonnel} />}
       {visibility.showCargoStatus && <CargoStatusCard shipments={shipments} />}
       {visibility.showOvertimes && <OvertimeReceivablesCard overtimes={overtimes} personnel={activePersonnel} />}
+      {visibility.showReminders && <RemindersCard reminders={reminders} />}
     </div>
   );
 };
@@ -572,6 +578,34 @@ const DailyBreaksCard = ({ breaks, personnel }: any) => {
                 </div>
               );
             })
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const RemindersCard = ({ reminders }: any) => {
+  return (
+    <Card className="glass-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bell className="h-5 w-5" />
+          Aktif Duyurular
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {reminders.length === 0 ? (
+             <p className="text-muted-foreground text-sm">Şu anda aktif duyuru bulunmuyor</p>
+          ) : (
+            reminders.map((r: any) => (
+              <div key={r.id} className="p-3 rounded-lg border bg-muted/20">
+                <p className="font-medium text-sm">{r.title}</p>
+                {r.description && <p className="text-xs text-muted-foreground mt-1">{r.description}</p>}
+                {r.is_survey && <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-100">Anket / Görev</span>}
+              </div>
+            ))
           )}
         </div>
       </CardContent>

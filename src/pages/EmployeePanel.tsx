@@ -79,9 +79,13 @@ const EmployeePanel = () => {
     showOvertime: true,
     showBreakViolations: true,
     showLeaveStatus: true,
+    showWeeklyDayOff: true,
     showSalesTargets: true,
     showMovements: true,
     showReminders: true,
+    showCargoStatus: true,
+    showShiftTracking: true,
+    showShiftVisuals: true,
   };
 
   const pVis = (personnel as any)?.module_visibility || {};
@@ -91,12 +95,14 @@ const EmployeePanel = () => {
     showOvertime: pVis.showOvertime ?? baseFeatures.showOvertime,
     showBreakViolations: pVis.showBreak ?? baseFeatures.showBreakViolations,
     showLeaveStatus: pVis.showLeave ?? baseFeatures.showLeaveStatus,
+    showWeeklyDayOff: baseFeatures.showWeeklyDayOff ?? baseFeatures.showLeaveStatus ?? true,
     showSalesTargets: pVis.showSales ?? baseFeatures.showSalesTargets,
     showMovements: pVis.showMovements ?? baseFeatures.showMovements,
     showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
-    showCargoStatus: pVis.showCargo ?? true,
+    showCargoStatus: pVis.showCargo ?? baseFeatures.showCargoStatus ?? true,
     showLogistics: pVis.showLogistics ?? true,
-    showShiftTracking: pVis.showShiftTracking ?? true,
+    showShiftTracking: pVis.showShiftTracking ?? baseFeatures.showShiftTracking ?? true,
+    showShiftVisuals: baseFeatures.showShiftVisuals ?? true,
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({
@@ -158,6 +164,23 @@ const EmployeePanel = () => {
       const todayDateOfMonth = today.getDate(); // 1-31
 
       const visibleReminders = (reminders || []).filter((rem: any) => {
+        let isTarget = false;
+        if (rem.personnel_id) {
+           isTarget = rem.personnel_id === personnel.id;
+        } else if (rem.department_name) {
+           if (rem.department_name === 'Tümü') isTarget = true;
+           else if (rem.department_name === 'Müdür Hariç Tümü') {
+              const isManager = (personnel.department || '').toLowerCase().includes('müdür');
+              isTarget = !isManager;
+           } else {
+              isTarget = personnel.department === rem.department_name;
+           }
+        } else {
+           isTarget = true;
+        }
+        
+        if (!isTarget) return false;
+
         if (!rem.recurrence || rem.recurrence === 'none' || rem.recurrence === 'daily') return true;
         
         const parts = rem.recurrence.split(',');
@@ -708,7 +731,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Day Off Selection */}
-        {features.showLeaveStatus && (
+        {features.showWeeklyDayOff && (
         <Card className="glass-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Haftalık İzin Günü</CardTitle>
@@ -955,7 +978,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Announcement Images Section */}
-        {Array.isArray(announcementImages) && announcementImages.length > 0 && (
+        {features.showShiftVisuals && Array.isArray(announcementImages) && announcementImages.length > 0 && (
           <div className="space-y-4 mt-8 pt-4 border-t">
             <h2 className="text-xl font-bold flex items-center gap-2 text-foreground mb-4"><ImagePlus className="w-5 h-5"/> Haftalık Shift Programı / Depo ve Mutfak Çalışması</h2>
             <div className="flex flex-col gap-6">

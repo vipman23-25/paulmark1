@@ -114,7 +114,7 @@ const ReminderManagement = () => {
 
     const payload = {
       personnel_id: formData.personnel_id || null,
-      department_name: formData.department_name === 'all' ? 'Tümü' : (formData.department_name || null),
+      department_name: formData.department_name === 'all' ? 'Tümü' : formData.department_name === 'all_except_managers' ? 'Müdür Hariç Tümü' : (formData.department_name || null),
       title: formData.title,
       description: formData.description,
       is_active: formData.is_active,
@@ -149,7 +149,7 @@ const ReminderManagement = () => {
 
     setFormData({
       personnel_id: reminder.personnel_id || '',
-      department_name: reminder.department_name === 'Tümü' ? 'all' : (reminder.department_name || ''),
+      department_name: reminder.department_name === 'Tümü' ? 'all' : reminder.department_name === 'Müdür Hariç Tümü' ? 'all_except_managers' : (reminder.department_name || ''),
       title: reminder.title,
       description: reminder.description || '',
       is_active: reminder.is_active,
@@ -222,6 +222,7 @@ const ReminderManagement = () => {
                 <option value="">Seçiniz...</option>
                 <optgroup label="Reyonlar (Departman)">
                   <option value="d_all">Tüm Şirket Çalışanları</option>
+                  <option value="d_all_except_managers">Tüm Çalışanlar (Müdür Hariç)</option>
                   {Array.from(new Set(personnel.map((p: any) => p.department).filter(Boolean))).map((dep: any) => (
                     <option key={`d_${dep}`} value={`d_${dep}`}>{dep} Reyonu</option>
                   ))}
@@ -409,7 +410,7 @@ const ReminderManagement = () => {
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground mb-2 font-medium bg-muted/50 p-1 rounded inline-block">
-                      {reminder.personnel ? `👤 ${reminder.personnel.first_name} ${reminder.personnel.last_name}` : (reminder.department_name === 'Tümü' ? '🏢 Tüm Şirket' : `🛍️ ${reminder.department_name} Reyonu`)}
+                      {reminder.personnel ? `👤 ${reminder.personnel.first_name} ${reminder.personnel.last_name}` : (reminder.department_name === 'Tümü' ? '🏢 Tüm Şirket' : reminder.department_name === 'Müdür Hariç Tümü' ? '👥 Tüm Çalışanlar (Müdür Hariç)' : `🛍️ ${reminder.department_name} Reyonu`)}
                     </p>
                     {reminder.description && (
                       <p className="text-sm text-muted-foreground mb-2">{reminder.description}</p>
@@ -421,8 +422,10 @@ const ReminderManagement = () => {
                       let targetAudience = personnel;
                       if (reminder.personnel_id) {
                         targetAudience = personnel.filter((p:any) => p.id === reminder.personnel_id);
-                      } else if (reminder.department_name && reminder.department_name !== 'Tümü') {
+                      } else if (reminder.department_name && reminder.department_name !== 'Tümü' && reminder.department_name !== 'Müdür Hariç Tümü') {
                         targetAudience = personnel.filter((p:any) => p.department === reminder.department_name);
+                      } else if (reminder.department_name === 'Müdür Hariç Tümü') {
+                        targetAudience = personnel.filter((p:any) => !(p.department || '').toLowerCase().includes('müdür'));
                       }
 
                       const missingPersonnel = targetAudience.filter((p:any) => !respondedIds.includes(p.id));

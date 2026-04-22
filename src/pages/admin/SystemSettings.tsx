@@ -23,6 +23,9 @@ export interface SystemSettings {
     showSalesTargets: boolean;
     showMovements: boolean;
     showReminders: boolean;
+    showWeeklyDayOff?: boolean;
+    showCargoStatus?: boolean;
+    showShiftVisuals?: boolean;
   };
   weeklySchedule?: any[];
 }
@@ -40,6 +43,9 @@ const defaultSettings: SystemSettings = {
     showSalesTargets: true,
     showMovements: true,
     showReminders: true,
+    showWeeklyDayOff: true,
+    showCargoStatus: true,
+    showShiftVisuals: true,
   },
   weeklySchedule: []
 };
@@ -474,8 +480,11 @@ const SystemSettingsView = () => {
               { key: 'showBreakViolations', label: 'Mola İhlal Özeti', desc: 'Günlük mola ihlallerini gösterir' },
               { key: 'showLeaveStatus', label: 'Yıllık İzin Durumu', desc: 'Yıllık izin hakkı ve kalan izni gösterir' },
               { key: 'showSalesTargets', label: 'Aylık Satış Özetleri', desc: 'Kişisel ve reyon satış hedeflerini gösterir' },
-              { key: 'showMovements', label: 'Kişisel Hareketler', desc: 'Son personel hareketleri geçmişini gösterir' },
-              { key: 'showReminders', label: 'Duyurular', desc: 'Personele yapılan genel veya özel duyuruları gösterir' }
+              { key: 'showMovements', label: 'Son Kişisel Hareketleriniz', desc: 'Son personel hareketleri geçmişini gösterir' },
+              { key: 'showReminders', label: 'Duyurular', desc: 'Personele yapılan genel veya özel duyuruları gösterir' },
+              { key: 'showWeeklyDayOff', label: 'Haftalık İzin Günü', desc: 'Personelin haftalık izin günü seçim ekranını gösterir' },
+              { key: 'showCargoStatus', label: 'Koli Sevkiyat Takibi', desc: 'Koli ve sevkiyat bekleme/sayım durumlarını gösterir' },
+              { key: 'showShiftVisuals', label: 'Personel Ekranı Shift Görseli', desc: 'Vardiya veya çalışma planı görsel yayınlarını gösterir' }
             ].map(f => {
                const features = settings.employeeDashboardFeatures || defaultSettings.employeeDashboardFeatures!;
                const isChecked = features[f.key as keyof typeof features] ?? true;
