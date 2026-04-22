@@ -27,15 +27,30 @@ const ShiftEngineTab = () => {
           { data: dayOffs },
           { data: deptRules },
           { data: pastSchedules },
-          { data: shiftPrefs }
+          { data: shiftPrefs },
+          { data: shiftCodesRaw }
         ] = await Promise.all([
           supabase.from('personnel').select('*').eq('is_active', true),
           supabase.from('personnel_movements').select('*'),
           supabase.from('weekly_day_off').select('*').eq('status', 'approved'),
           supabase.from('department_shift_rules').select('*'),
           supabase.from('shift_schedules').select('*').gte('shift_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-          supabase.from('shift_preferences').select('*').eq('status', 'approved')
+          supabase.from('shift_preferences').select('*').eq('status', 'approved'),
+          supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'shift_codes').maybeSingle()
         ]);
+
+        const defaultCodes = [
+          { code: 'S', label: 'S - Sabah' },
+          { code: 'A', label: 'A - Akşam' },
+          { code: 'S+M', label: 'S+M - Sabah Mutfak' },
+          { code: 'A+M', label: 'A+M - Akşam Mutfak' },
+          { code: 'S+D', label: 'S+D - Sabah Depo' },
+          { code: 'A+D', label: 'A+D - Akşam Depo' },
+          { code: 'İ', label: 'İ - İzin' },
+          { code: 'R', label: 'R - Raporlu' },
+          { code: 'O', label: 'O - Ortak' },
+          { code: '-', label: '-' }
+        ];
 
         return {
           personnel: personnel || [],
@@ -43,7 +58,8 @@ const ShiftEngineTab = () => {
           dayOffs: dayOffs || [],
           deptRules: deptRules || [],
           pastSchedules: pastSchedules || [],
-          shiftPrefs: shiftPrefs || []
+          shiftPrefs: shiftPrefs || [],
+          shiftCodes: shiftCodesRaw?.setting_value || defaultCodes
         };
     }
   });
@@ -396,17 +412,9 @@ const ShiftEngineTab = () => {
                                                             value={val}
                                                             onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
                                                           >
-                                                            <option value="S">S - Sabah</option>
-                                                            <option value="A">A - Akşam</option>
-                                                            <option value="S+M">S+M - Sabah Mutfak</option>
-                                                            <option value="A+M">A+M - Akşam Mutfak</option>
-                                                            <option value="S+D">S+D - Sabah Depo</option>
-                                                            <option value="A+D">A+D - Akşam Depo</option>
-                                                            <option value="S+M+D">S+M+D - Sb. Mutf. Depo</option>
-                                                            <option value="İ">İ - İzin</option>
-                                                            <option value="R">R - Raporlu</option>
-                                                            <option value="O">O - Ortak</option>
-                                                            <option value="-">-</option>
+                                                            {engineContext.shiftCodes.map((c: any) => (
+                                                                <option key={c.code} value={c.code}>{c.label}</option>
+                                                            ))}
                                                           </select>
                                                       </TableCell>
                                                   );

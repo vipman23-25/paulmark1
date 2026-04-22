@@ -15,6 +15,59 @@ const DAYS = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cuma
 const ShiftSettingsTab = () => {
   const queryClient = useQueryClient();
   const [genderForm, setGenderForm] = useState({ gender: '', day_of_week: '', warning_message: '' });
+  const [newCode, setNewCode] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+
+  const { data: shiftCodes, isLoading: loadingCodes } = useQuery({
+    queryKey: ['system_settings_shift_codes'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'shift_codes').maybeSingle();
+      if (error) throw error;
+      return data?.setting_value || [
+        { code: 'S', label: 'S - Sabah' },
+        { code: 'A', label: 'A - Akşam' },
+        { code: 'S+M', label: 'S+M - Sabah Mutfak' },
+        { code: 'A+M', label: 'A+M - Akşam Mutfak' },
+        { code: 'S+D', label: 'S+D - Sabah Depo' },
+        { code: 'A+D', label: 'A+D - Akşam Depo' },
+        { code: 'İ', label: 'İ - İzin' },
+        { code: 'R', label: 'R - Raporlu' },
+        { code: 'O', label: 'O - Ortak' },
+        { code: '-', label: '-' }
+      ];
+    }
+  });
+
+  const upsertShiftCodes = useMutation({
+    mutationFn: async (newCodes: any[]) => {
+      const { error } = await supabase.from('system_settings' as any).upsert({
+        setting_key: 'shift_codes',
+        setting_value: newCodes
+      }, { onConflict: 'setting_key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system_settings_shift_codes'] });
+      toast.success('Özel vardiya kodları güncellendi');
+    }
+  });
+
+  const handleAddCode = () => {
+      if (!newCode.trim() || !newLabel.trim()) return toast.error('Kod ve açıklama alanlarını doldurun');
+      const updated = [...(shiftCodes || []), { code: newCode.trim(), label: newLabel.trim() }];
+      upsertShiftCodes.mutate(updated);
+      setNewCode('');
+      setNewLabel('');
+  };
+
+  const handleRemoveCode = (codeToRemove: string) => {
+      // S, A, İ, R gibi kök kodların silinmesini engelleyelim
+      if (['S', 'A', 'İ', 'R'].includes(codeToRemove)) {
+          return toast.error(`${codeToRemove} kodu sistemin ana dağıtım motoru için gereklidir, silinemez.`);
+      }
+      const updated = (shiftCodes || []).filter((c: any) => c.code !== codeToRemove);
+      upsertShiftCodes.mutate(updated);
+  };
 
   const { data: genderRules, isLoading: loadingGender } = useQuery({
     queryKey: ['shift_gender_rules'],
@@ -186,6 +239,40 @@ const ShiftSettingsTab = () => {
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle>Vardiya Hücre Seçenekleri (Dinamik Shift Kodları)</CardTitle>
+          <CardDescription>Otomatik vardiya tablosundaki açılır menülerde personelinize atayabileceğiniz özel kodları (S+M, Gece vb.) buradan yönetebilirsiniz.</CardDescription>
+        </CardHeader>
+        <CardContent>
+           <div className="flex flex-col sm:flex-row gap-3 mb-6 items-end">
+              <div className="flex-1 space-y-2">
+                  <Label>Kısa Kod (Hücrede Yazan)</Label>
+                  <Input placeholder="Örn: G" value={newCode} onChange={e => setNewCode(e.target.value)} />
+              </div>
+              <div className="flex-[2] space-y-2">
+                  <Label>Açıklama (Menüde Yazan)</Label>
+                  <Input placeholder="Örn: G - Gece Vardiyası" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
+              </div>
+              <Button onClick={handleAddCode} disabled={upsertShiftCodes.isPending}>Ekle</Button>
+           </div>
+
+           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {shiftCodes?.map((c: any) => (
+                  <div key={c.code} className="flex items-center justify-between bg-muted/30 border rounded p-2">
+                      <div className="overflow-hidden">
+                         <p className="font-bold text-sm truncate" title={c.code}>{c.code}</p>
+                         <p className="text-xs text-muted-foreground truncate" title={c.label}>{c.label}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveCode(c.code)} className="h-6 w-6 text-muted-foreground hover:text-red-500">
+                          <Trash2 className="w-3 h-3" />
+                      </Button>
+                  </div>
+              ))}
+           </div>
         </CardContent>
       </Card>
     </div>
