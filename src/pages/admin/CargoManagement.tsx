@@ -125,6 +125,7 @@ const CargoManagement = () => {
     }
     
     try {
+      // 1. Ana tablo (Sevkiyat Özeti)
       const exportData = shipments.map(item => {
         const remaining = Math.max(0, item.total_boxes - item.counted_boxes);
         const status = calculateStatusInfo(item.total_boxes, item.counted_boxes);
@@ -138,6 +139,22 @@ const CargoManagement = () => {
           speed = Math.round(item.total_boxes / diffDays);
         }
 
+        // Aggregate logs for the summary column
+        let logSummary = '-';
+        if (item.cargo_shipment_logs && item.cargo_shipment_logs.length > 0) {
+           const aggregated = item.cargo_shipment_logs.reduce((acc: any, log: any) => {
+             if (!acc[log.personnel_name]) acc[log.personnel_name] = 0;
+             acc[log.personnel_name] += Number(log.added_count || 0);
+             return acc;
+           }, {});
+           
+           logSummary = Object.entries(aggregated)
+             .filter(([_, count]: [string, any]) => count !== 0)
+             .sort((a: any, b: any) => b[1] - a[1])
+             .map(([name, count]) => `${name}: ${count}`)
+             .join(' | ');
+        }
+
         return {
           'Geliş Tarihi': format(new Date(item.arrival_date), 'dd.MM.yyyy', { locale: tr }),
           'Toplam Koli': item.total_boxes,
@@ -147,13 +164,40 @@ const CargoManagement = () => {
           'Bitiş Tarihi': item.completion_date ? format(new Date(item.completion_date), 'dd.MM.yyyy HH:mm', { locale: tr }) : '-',
           'Geçen Süre (Gün)': item.completion_date && item.counted_boxes >= item.total_boxes ? diffDays : '-',
           'Ortalama Hız (Koli/Gün)': item.completion_date && item.counted_boxes >= item.total_boxes ? speed : '-',
-          'Notlar/Açıklama': item.notes || '-'
+          'Sayım Yapanlar (Özet)': logSummary || '-',
+          'Admin Notu': item.notes || '-',
+          'Personel Notu': item.personnel_notes || '-'
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(exportData);
+      // 2. Detaylı Log Tablosu (Tüm Hareketler)
+      const logsData: any[] = [];
+      shipments.forEach(item => {
+        if (item.cargo_shipment_logs && item.cargo_shipment_logs.length > 0) {
+          const sortedLogs = [...item.cargo_shipment_logs].sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          sortedLogs.forEach(log => {
+            logsData.push({
+              'Sevkiyat Geliş Tarihi': format(new Date(item.arrival_date), 'dd.MM.yyyy', { locale: tr }),
+              'Sevkiyat Toplam Koli': item.total_boxes,
+              'İşlem Tarihi': format(new Date(log.created_at), 'dd.MM.yyyy HH:mm:ss', { locale: tr }),
+              'Personel': log.personnel_name,
+              'İşlem (Koli Adedi)': log.added_count > 0 ? `+${log.added_count}` : log.added_count,
+              'İşlem Tipi': log.added_count > 0 ? 'Sayım Ekleme' : 'Sayım Çıkarma/Düzeltme'
+            });
+          });
+        }
+      });
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Koli_Sevkiyatlar");
+      
+      const wsMain = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, wsMain, "Koli_Sevkiyatlar");
+      
+      if (logsData.length > 0) {
+        const wsLogs = XLSX.utils.json_to_sheet(logsData);
+        XLSX.utils.book_append_sheet(wb, wsLogs, "Tüm_Log_Hareketleri");
+      }
+      
       XLSX.writeFile(wb, `Sevkiyat_Sayimlari_${format(new Date(), 'dd_MM_yyyy')}.xlsx`);
       toast.success('Excel dosyası başarıyla indirildi');
     } catch (e: any) {
