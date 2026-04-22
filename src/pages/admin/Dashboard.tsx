@@ -73,7 +73,9 @@ const Dashboard = () => {
 
   const { personnel, breaks, movements, dayOffs, overtimes, shipments, weeklySchedule, reminders } = data;
   const activePersonnel = personnel.filter(p => p.is_active);
-  const onBreakRecords = breaks.filter(b => b.break_end === null);
+  const onBreakRecords = breaks
+    .filter(b => b.break_end === null)
+    .sort((a: any, b: any) => new Date(b.break_start).getTime() - new Date(a.break_start).getTime());
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -467,7 +469,7 @@ const BreaksCard = ({ breaks, personnel }: any) => {
           {breaks.length === 0 ? (
             <p className="text-muted-foreground text-sm">Şu anda molada olan yok</p>
           ) : (
-            breaks.slice(0, 10).map((b: any) => {
+            breaks.map((b: any) => {
               const startTime = new Date(b.break_start);
               const duration = Math.round((new Date().getTime() - startTime.getTime()) / (1000 * 60));
               return (
@@ -513,7 +515,7 @@ const MovementsCard = ({ movements, personnel }: any) => {
           {activeMovements.length === 0 ? (
             <p className="text-muted-foreground col-span-full">Şu anda aktif hareket yok</p>
           ) : (
-            activeMovements.slice(0, 8).map((m: any) => {
+            activeMovements.map((m: any) => {
               const startDate = new Date(m.start_date);
               const endDate = new Date(m.end_date);
               return (
