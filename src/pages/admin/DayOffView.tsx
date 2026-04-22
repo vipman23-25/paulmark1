@@ -19,7 +19,7 @@ const DayOffView = () => {
   const queryClient = useQueryClient();
   const [selectedWeeklyIds, setSelectedWeeklyIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [form, setForm] = useState({ personnel_id: '', day_of_week: '', description: '' });
+  const [form, setForm] = useState({ personnel_id: '', day_of_week: '', description: '', requested_shift: 'farketmez', admin_response: '', status: 'approved' });
 
   const { data: personnel = [], isLoading: pLoading } = useQuery({
     queryKey: ['active_personnel'],
@@ -41,9 +41,10 @@ const DayOffView = () => {
   });
 
   const upsertMutation = useMutation({
-    mutationFn: async ({ personnel_id, day_of_week, description }: { personnel_id: string, day_of_week: number, description?: string }) => {
+    mutationFn: async ({ personnel_id, day_of_week, description, requested_shift, admin_response, status }: { personnel_id: string, day_of_week: number, description?: string, requested_shift?: string, admin_response?: string, status?: string }) => {
       await supabase.from('weekly_day_off').delete().eq('personnel_id', personnel_id);
-      const { data, error } = await supabase.from('weekly_day_off').insert({ personnel_id, day_of_week, description }).select();
+      const payload: any = { personnel_id, day_of_week, description, requested_shift, admin_response, status };
+      const { data, error } = await supabase.from('weekly_day_off').insert(payload).select();
       if (error) throw error;
       return data;
     },
@@ -51,7 +52,7 @@ const DayOffView = () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
       toast.success('Haftalık izin atandı/güncellendi!');
       setIsOpen(false);
-      setForm({ personnel_id: '', day_of_week: '', description: '' });
+      setForm({ personnel_id: '', day_of_week: '', description: '', requested_shift: 'farketmez', admin_response: '', status: 'approved' });
     },
     onError: (error: any) => toast.error('İşlem başarısız: ' + error.message)
   });
@@ -89,6 +90,18 @@ const DayOffView = () => {
     }
   };
 
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status, admin_response }: { id: string, status: string, admin_response?: string }) => {
+      const payload: any = { status, admin_response };
+      const { error } = await supabase.from('weekly_day_off').update(payload).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
+      toast.success('Talep durumu güncellendi');
+    }
+  });
+
   const handleBulkDeleteWeekly = () => {
     if (selectedWeeklyIds.length === 0) return;
     if (confirm(`${selectedWeeklyIds.length} adet kaydı silmek istediğinize emin misiniz?`)) {
@@ -102,11 +115,18 @@ const DayOffView = () => {
       toast.error('Lütfen personel ve gün seçiniz');
       return;
     }
-    upsertMutation.mutate({ personnel_id: form.personnel_id, day_of_week: Number(form.day_of_week), description: form.description });
+    upsertMutation.mutate({ personnel_id: form.personnel_id, day_of_week: Number(form.day_of_week), description: form.description, requested_shift: form.requested_shift, admin_response: form.admin_response, status: form.status });
   };
 
   const handleEdit = (p: any, dayOff: any) => {
-    setForm({ personnel_id: p.id, day_of_week: dayOff ? dayOff.day_of_week.toString() : '', description: dayOff?.description || '' });
+    setForm({ 
+      personnel_id: p.id, 
+      day_of_week: dayOff ? dayOff.day_of_week.toString() : '', 
+      description: dayOff?.description || '',
+      requested_shift: dayOff?.requested_shift || 'farketmez',
+      admin_response: dayOff?.admin_response || '',
+      status: dayOff?.status || 'approved'
+    });
     setIsOpen(true);
   };
 
@@ -128,7 +148,7 @@ const DayOffView = () => {
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Yenile">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if(!o) setForm({personnel_id:'', day_of_week:'', description:''}); }}>
+          <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if(!o) setForm({personnel_id:'', day_of_week:'', description:'', requested_shift: 'farketmez', admin_response: '', status: 'approved'}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2"/> Yeni İzin Ata / Değiştir</Button>
             </DialogTrigger>
@@ -197,7 +217,9 @@ const DayOffView = () => {
                   <TableHead>Personel</TableHead>
                   <TableHead>Departman</TableHead>
                   <TableHead>İzin Günü</TableHead>
+                  <TableHead>Vardiya İsteği</TableHead>
                   <TableHead>Açıklama</TableHead>
+                  <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,12 +248,41 @@ const DayOffView = () => {
                       </div>
                     </TableCell>
                     <TableCell>
+                      {p.weeklyDayOffs.length > 0 ? (
+                        (() => {
+                           const req = (p.weeklyDayOffs[0] as any).requested_shift;
+                           if (req === 'sabah') return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200">Sabah İstiyor</Badge>
+                           if (req === 'aksam') return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 hover:bg-indigo-200">Akşam İstiyor</Badge>
+                           return <span className="text-xs text-muted-foreground italic">Seçilmedi</span>;
+                        })()
+                      ) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                    <TableCell>
                        {p.weeklyDayOffs.length > 0 && p.weeklyDayOffs[0].description ? (
-                          <span className="text-sm text-muted-foreground">{p.weeklyDayOffs[0].description}</span>
+                          <span className="text-sm text-foreground font-medium">{p.weeklyDayOffs[0].description}</span>
                        ) : <span className="text-muted-foreground">-</span>}
                     </TableCell>
+                    <TableCell>
+                      {p.weeklyDayOffs.length > 0 ? (
+                        (() => {
+                           const s = (p.weeklyDayOffs[0] as any).status;
+                           if (s === 'approved') return <Badge className="bg-green-100 text-green-800 border-none">Onaylandı</Badge>
+                           if (s === 'rejected') return <Badge className="bg-red-100 text-red-800 border-none">Reddedildi</Badge>
+                           return <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 animate-pulse">Bekliyor</Badge>
+                        })()
+                      ) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1 flex-wrap">
+                        {p.weeklyDayOffs.length > 0 && (p.weeklyDayOffs[0] as any).status === 'pending' && (
+                           <>
+                             <Button size="sm" variant="outline" className="bg-green-50 hover:bg-green-100 text-green-700 h-8 px-2" onClick={() => updateStatusMutation.mutate({ id: p.weeklyDayOffs[0].id, status: 'approved' })}>Onayla</Button>
+                             <Button size="sm" variant="outline" className="bg-red-50 hover:bg-red-100 text-red-700 h-8 px-2" onClick={() => {
+                               const rationale = window.prompt("Reddetme sebebi?");
+                               if (rationale !== null) updateStatusMutation.mutate({ id: p.weeklyDayOffs[0].id, status: 'rejected', admin_response: rationale });
+                             }}>Reddet</Button>
+                           </>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

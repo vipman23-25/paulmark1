@@ -1,4 +1,4 @@
-import { Users, Clock, Calendar, Bell, Timer, LogOut, LayoutDashboard, Activity, Settings, Umbrella, Target, Package, Truck } from 'lucide-react';
+import { Users, Clock, Calendar, Bell, Timer, LogOut, LayoutDashboard, Activity, Settings, Umbrella, Target, Package, Truck, CalendarRange } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,6 +29,7 @@ const menuItems = [
   { title: 'Hareketler', url: '/admin/movements', icon: Activity },
   { title: 'İzin Günleri', url: '/admin/day-off', icon: Calendar },
   { title: 'Fazla Mesai', url: '/admin/overtime', icon: Timer },
+  { title: 'Vardiya Yönetimi', url: '/admin/shifts', icon: CalendarRange },
   { title: 'Koli/Sevkiyat', url: '/admin/cargo', icon: Package },
   { title: 'Kargo Takip', url: '/admin/logistics', icon: Truck },
   { title: 'Duyurular', url: '/admin/reminders', icon: Bell },
@@ -66,7 +67,7 @@ export function AdminSidebar() {
         .eq('setting_key', 'admin_credentials')
         .maybeSingle();
 
-      const creds: any = adminSettings?.setting_value || { username: 'admin', password: 'admin' };
+      const creds: any = (adminSettings as any)?.setting_value || { username: 'admin', password: 'admin' };
       
       if (pwdForm.currentPass !== creds.password) {
         toast.error('Mevcut şifre yanlış');
@@ -77,7 +78,7 @@ export function AdminSidebar() {
       const newCreds = { ...creds, password: pwdForm.newPass };
       
       if (adminSettings) {
-        await supabase.from('system_settings' as any).update({ setting_value: newCreds }).eq('id', adminSettings.id);
+        await supabase.from('system_settings' as any).update({ setting_value: newCreds }).eq('id', (adminSettings as any).id);
       } else {
         await supabase.from('system_settings' as any).insert({ setting_key: 'admin_credentials', setting_value: newCreds });
       }

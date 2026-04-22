@@ -19,6 +19,7 @@ import SystemSettingsView from "./pages/admin/SystemSettings";
 import SalesTargets from "./pages/admin/SalesTargets";
 import CargoManagement from "./pages/admin/CargoManagement";
 import LogisticsTracking from "./pages/admin/LogisticsTracking";
+import ShiftManagement from "./pages/admin/ShiftManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="movements" element={<MovementManagement />} />
               <Route path="day-off" element={<DayOffView />} />
               <Route path="overtime" element={<OvertimeManagement />} />
+              <Route path="shifts" element={<ShiftManagement />} />
               <Route path="cargo" element={<CargoManagement />} />
               <Route path="logistics" element={<LogisticsTracking />} />
               <Route path="reminders" element={<ReminderManagement />} />

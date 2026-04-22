@@ -44,6 +44,7 @@ const EmployeePanel = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dayOffDescription, setDayOffDescription] = useState('');
+  const [requestedShift, setRequestedShift] = useState('farketmez');
   const [isLogisticsOpen, setIsLogisticsOpen] = useState(false);
   const [logisticsForm, setLogisticsForm] = useState({
     company_name: '',
@@ -149,10 +150,14 @@ const EmployeePanel = () => {
       
       const [
          { data: colleagueBreaks },
-         { data: colleagueMovements }
+         { data: colleagueMovements },
+         { data: colleagueDayOffs },
+         { data: genderRules }
       ] = await Promise.all([
          coworkerIds.length > 0 ? supabase.from('break_records' as any).select('*').in('personnel_id', coworkerIds) : { data: [] },
-         coworkerIds.length > 0 ? supabase.from('personnel_movements' as any).select('*').in('personnel_id', coworkerIds).order('start_date', { ascending: false }) : { data: [] }
+         coworkerIds.length > 0 ? supabase.from('personnel_movements' as any).select('*').in('personnel_id', coworkerIds).order('start_date', { ascending: false }) : { data: [] },
+         coworkerIds.length > 0 ? supabase.from('weekly_day_off' as any).select('*').in('personnel_id', coworkerIds) : { data: [] },
+         supabase.from('shift_gender_rules' as any).select('*')
       ]);
       
       const salesTarget = (allDepartmentSalesTargets || []).find((s: any) => s.personnel_id === personnel.id) || null;
@@ -213,7 +218,9 @@ const EmployeePanel = () => {
         weeklySchedule,
         deptCoworkers: deptCoworkers || [],
         colleagueBreaks: colleagueBreaks || [],
-        colleagueMovements: colleagueMovements || []
+        colleagueMovements: colleagueMovements || [],
+        colleagueDayOffs: colleagueDayOffs || [],
+        genderRules: genderRules || []
       };
     },
     enabled: !!personnel?.id,
@@ -329,13 +336,14 @@ const EmployeePanel = () => {
   });
 
   const toggleDayMutation = useMutation({
-    mutationFn: async ({ day, isSelected, allIds, description }: { day: number, isSelected: boolean, allIds: string[], description?: string }) => {
+    mutationFn: async ({ day, isSelected, allIds, description, reqShift }: { day: number, isSelected: boolean, allIds: string[], description?: string, reqShift?: string }) => {
       if (allIds.length > 0) {
         const { error: delErr } = await supabase.from('weekly_day_off').delete().in('id', allIds);
         if (delErr) throw delErr;
       }
       if (!isSelected) {
-        const { error: insErr } = await supabase.from('weekly_day_off').insert({ personnel_id: personnel.id, day_of_week: day, description });
+        const payload: any = { personnel_id: personnel.id, day_of_week: day, description, requested_shift: reqShift, status: 'pending' };
+        const { error: insErr } = await supabase.from('weekly_day_off').insert(payload);
         if (insErr) throw insErr;
         return { deleted: false };
       }
@@ -385,6 +393,7 @@ const EmployeePanel = () => {
   useEffect(() => {
     if (dashboardData?.weeklyDayOffs && dashboardData.weeklyDayOffs.length > 0) {
       setDayOffDescription(dashboardData.weeklyDayOffs[0].description || '');
+      setRequestedShift(dashboardData.weeklyDayOffs[0].requested_shift || 'farketmez');
     }
   }, [dashboardData?.weeklyDayOffs]);
 
@@ -468,7 +477,23 @@ const EmployeePanel = () => {
   const toggleDay = (day: number) => {
     const isSelected = safeWeeklyDayOffs.some((d: any) => d.day_of_week === day);
     const allIds = safeWeeklyDayOffs.map((r: any) => r.id);
-    toggleDayMutation.mutate({ day, isSelected, allIds, description: dayOffDescription });
+    
+    if (!isSelected) {
+      const colleagueSameDay = dashboardData?.colleagueDayOffs?.filter((d: any) => d.day_of_week === day) || [];
+      if (colleagueSameDay.length > 0) {
+        if (!window.confirm("Uyarı: Reyonunuzdaki " + colleagueSameDay.length + " arkadaşınız bu günü izin günü olarak seçmiş. Yine de seçmek ister misiniz?")) {
+          return;
+        }
+      }
+
+      const genderBlock = dashboardData?.genderRules?.find((r: any) => r.day_of_week === day && r.gender === (personnel as any).gender);
+      if (genderBlock) {
+         toast.error(genderBlock.warning_message || "Bu gün için sistem tarafından cinsiyetinize özel bir izin kısıtlaması getirilmiştir.");
+         return;
+      }
+    }
+
+    toggleDayMutation.mutate({ day, isSelected, allIds, description: dayOffDescription, reqShift: requestedShift });
   };
 
   const { months, days } = calculateWorkDuration(personnel.start_date);
@@ -743,15 +768,30 @@ const EmployeePanel = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Input 
-                  placeholder="İzin talebinizle ilgili kısa bir not ekleyebilirsiniz (İsteğe bağlı)..." 
-                  value={dayOffDescription} 
-                  onChange={(e) => setDayOffDescription(e.target.value)}
-                  className="max-w-md bg-muted/50"
-                />
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Vardiya Tercihiniz (İsteğe bağlı)</Label>
+                  <select 
+                    value={requestedShift}
+                    onChange={(e) => setRequestedShift(e.target.value)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background/50 px-3 py-2 text-sm transition-colors focus:bg-background"
+                  >
+                    <option value="farketmez">Farketmez (Sistem Belirlesin)</option>
+                    <option value="sabah">Sabah Vardiyasında Olmak İstiyorum</option>
+                    <option value="aksam">Akşam Vardiyasında Olmak İstiyorum</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground ml-1">Notunuz (İsteğe bağlı)</Label>
+                  <Input 
+                    placeholder="Örn: Cuma sabahçı olmak istiyorum çünkü..." 
+                    value={dayOffDescription} 
+                    onChange={(e) => setDayOffDescription(e.target.value)}
+                    className="bg-muted/50 focus:bg-background transition-colors"
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
                 {DAYS.slice(1, 6).map((day, idx) => {
                   const i = idx + 1;
                   const isSelected = selectedDays.includes(i);
