@@ -219,19 +219,35 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
   const getBreakBadge = (pString: string) => {
     if (daysOffset !== 0) return null;
     if (!personnel || !breaks) return null;
-    const nameOnly = pString.split('+')[0].trim();
-    const person = personnel.find((per: any) => `${per.first_name} ${per.last_name}`.trim().toLowerCase() === nameOnly.toLowerCase());
+    
+    const nameOnly = pString.split('+')[0].trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ');
+    const person = personnel.find((per: any) => 
+      `${per.first_name} ${per.last_name}`.trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ') === nameOnly
+    );
+    
     if (!person) return null;
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayBreaks = breaks.filter((b: any) => (b.break_start || '').startsWith(todayStr) && b.personnel_id === person.id);
-    if (todayBreaks.length === 0) return null;
+    // Aktif Mola Kontrolü
+    const activeBreak = breaks.find((b: any) => !b.break_end && b.personnel_id === person.id);
+    if (activeBreak) {
+      return <LiveBreakBadge activeBreak={activeBreak} />;
+    }
 
-    const active = todayBreaks.find((b: any) => !b.break_end);
-    if (active && daysOffset === 0) return <LiveBreakBadge activeBreak={active} />;
+    // Bugün tamamlanmış molalar
+    const today = new Date();
+    const todayFinishedBreaks = breaks.filter((b: any) => {
+      if (!b.break_start || !b.break_end) return false;
+      if (b.personnel_id !== person.id) return false;
+      const d = new Date(b.break_start);
+      return d.getDate() === today.getDate() && 
+             d.getMonth() === today.getMonth() && 
+             d.getFullYear() === today.getFullYear();
+    });
 
-    const violation = todayBreaks.find((b: any) => {
-      if (!b.break_end) return false;
+    if (todayFinishedBreaks.length === 0) return null;
+
+    // İhlal kontrolü
+    const violation = todayFinishedBreaks.find((b: any) => {
       const start = new Date(b.break_start).getTime();
       const end = new Date(b.break_end).getTime();
       return Math.round((end - start) / (1000 * 60)) > 60;
@@ -244,8 +260,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
       return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">İhlal ({dur}dk)</span>;
     }
 
-    const totalFinishedDuration = todayBreaks.reduce((acc: number, b: any) => {
-       if (!b.break_end) return acc;
+    const totalFinishedDuration = todayFinishedBreaks.reduce((acc: number, b: any) => {
        const start = new Date(b.break_start).getTime();
        const end = new Date(b.break_end).getTime();
        return acc + Math.round((end - start) / (1000 * 60));
