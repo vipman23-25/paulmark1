@@ -512,11 +512,6 @@ const EmployeePanel = () => {
           <Button variant="outline" size="sm" onClick={handleSignOut}><LogOut className="w-4 h-4 mr-2" /> Çıkış</Button>
         </div>
 
-        {/* Colleague Shift Panel */}
-        {features.showShiftTracking && (
-          <ColleagueShiftPanel dashboardData={dashboardData} personnel={personnel} />
-        )}
-
         {/* Break Section */}
         {features.showBreak && (
         <Card className="glass-card">
@@ -554,6 +549,11 @@ const EmployeePanel = () => {
             )}
           </CardContent>
         </Card>
+        )}
+
+        {/* Colleague Shift Panel */}
+        {features.showShiftTracking && (
+          <ColleagueShiftPanel dashboardData={dashboardData} personnel={personnel} />
         )}
 
         {/* Dashboards */}
