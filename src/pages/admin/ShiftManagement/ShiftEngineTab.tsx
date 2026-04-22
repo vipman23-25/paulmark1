@@ -242,12 +242,17 @@ const ShiftEngineTab = () => {
                                       return (
                                           <TableCell key={dateStr} className="p-1">
                                               <select 
-                                                className={`w-full h-full text-center p-2 rounded outline-none font-bold text-xs ring-1 ring-inset ${val === 'S' ? 'bg-yellow-50 text-yellow-700 ring-yellow-200' : val === 'A' ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : val === 'İ' ? 'bg-green-50 text-green-700 ring-green-200' : val === 'R' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-transparent ring-border'}`}
+                                                className={`w-full h-full text-center p-2 rounded outline-none font-bold text-xs ring-1 ring-inset ${val.startsWith('S') ? 'bg-yellow-50 text-yellow-700 ring-yellow-200' : val.startsWith('A') ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : val === 'İ' ? 'bg-green-50 text-green-700 ring-green-200' : val === 'R' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-transparent ring-border'}`}
                                                 value={val}
                                                 onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
                                               >
                                                 <option value="S">S - Sabah</option>
                                                 <option value="A">A - Akşam</option>
+                                                <option value="S+M">S+M - Sabah Mutfak</option>
+                                                <option value="A+M">A+M - Akşam Mutfak</option>
+                                                <option value="S+D">S+D - Sabah Depo</option>
+                                                <option value="A+D">A+D - Akşam Depo</option>
+                                                <option value="S+M+D">S+M+D - Sb. Mutf. Depo</option>
                                                 <option value="İ">İ - İzin</option>
                                                 <option value="R">R - Raporlu</option>
                                                 <option value="O">O - Ortak</option>

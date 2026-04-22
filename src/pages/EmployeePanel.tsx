@@ -1139,8 +1139,8 @@ const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any,
     }
 
     let title = shiftType === 'Sabah' ? 'Sabah Vardiyası' : shiftType === 'Akşam' ? 'Akşam Vardiyası' : shiftRaw;
-    const hasMutfak = shiftRaw.toLowerCase().includes('mutfak');
-    const hasDepo = shiftRaw.toLowerCase().includes('depo');
+    const hasMutfak = shiftRaw.toLowerCase().includes('mutfak') || shiftRaw.toUpperCase().includes('+M');
+    const hasDepo = shiftRaw.toLowerCase().includes('depo') || shiftRaw.toUpperCase().includes('+D');
 
     if (hasMutfak && !title.toLowerCase().includes('mutfak')) title += ' + Mutfak';
     if (hasDepo && !title.toLowerCase().includes('depo')) title += ' + Depo';
@@ -1188,7 +1188,7 @@ const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any,
       statusColor = 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400';
     }
 
-    return { title, statusLabel, statusColor };
+    return { title, statusLabel, statusColor, hasMutfak, hasDepo };
   };
 
   const myStatusToday = getShiftStatus(personnel, 0);
@@ -1240,7 +1240,11 @@ const ColleagueShiftPanel = ({ dashboardData, personnel }: { dashboardData: any,
                 return (
                   <div key={c.id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-2.5 rounded-lg border bg-background/50 transition-colors border-l-4 ${status.statusColor.split(' ')[0].replace('bg-', 'border-')}`}>
                     <div>
-                      <p className="font-bold text-sm tracking-tight">{c.first_name} {c.last_name}</p>
+                      <p className="font-bold text-sm tracking-tight">
+                        {c.first_name} {c.last_name}
+                        {status.hasMutfak && <span className="text-orange-600 dark:text-orange-400 font-extrabold ml-1">+M</span>}
+                        {status.hasDepo && <span className="text-blue-600 dark:text-blue-400 font-extrabold ml-1">+D</span>}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-0.5">{status.title}</p>
                     </div>
                     <div className={`mt-2 sm:mt-0 text-[10px] uppercase font-bold px-2.5 py-1 rounded-full border shadow-sm ${status.statusColor}`}>
