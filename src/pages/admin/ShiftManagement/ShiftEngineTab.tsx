@@ -9,7 +9,14 @@ import { toast } from 'sonner';
 import { FileDown, Calendar as CalIcon, Settings2, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const DAYS_TR = ['P.TESİ', 'SALI', 'ÇARŞ', 'PERŞ', 'CUMA', 'C.TESİ', 'PAZAR'];
 const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+const formatDateTR = (dateStr: string) => {
+    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const d = new Date(dateStr);
+    return `${d.getDate()} ${months[d.getMonth()]}`;
+};
 
 const ShiftEngineTab = () => {
   const queryClient = useQueryClient();
@@ -355,21 +362,24 @@ const ShiftEngineTab = () => {
                 </div>
              </div>
 
-             <div className="border rounded-xl overflow-hidden mt-4 shadow-sm">
+             <div className="border border-black/30 rounded-xl overflow-hidden mt-4 shadow-sm bg-white">
                  <div className="overflow-x-auto">
-                    <Table className="bg-card">
-                       <TableHeader>
-                          <TableRow className="bg-muted/50 hover:bg-muted/50">
-                             <TableHead className="w-[180px] border-r">Personel</TableHead>
-                             <TableHead className="w-[120px] border-r">Reyon</TableHead>
+                    <table className="w-full text-sm border-collapse text-black">
+                       <thead>
+                          <tr className="bg-gray-200 text-center border-b-2 border-black/40">
+                             <th className="border-r border-black/20 p-1.5 w-10 font-bold"></th>
+                             <th className="border-r border-black/20 p-1.5 w-[200px] font-bold text-left pl-3">ADI SOYADI</th>
+                             <th className="border-r border-black/20 p-1.5 w-[140px] font-bold text-left pl-3">GÖREVİ</th>
                              {getWeekDates(selectedWeekStart).map((dateStr, i) => (
-                                 <TableHead key={dateStr} className="text-center font-bold">
-                                     {DAYS[i]} <br/><span className="text-[10px] font-normal text-muted-foreground">{dateStr.split('-')[2]}.{dateStr.split('-')[1]}</span>
-                                 </TableHead>
+                                 <th key={dateStr} className="border-r border-black/20 p-1.5 w-[85px]">
+                                     <div className="font-bold">{DAYS_TR[i]}</div>
+                                     <div className="font-normal italic text-[11px] leading-tight">{formatDateTR(dateStr)}</div>
+                                 </th>
                              ))}
-                          </TableRow>
-                       </TableHeader>
-                       <TableBody>
+                             <th className="p-1.5 w-16 bg-yellow-200 border-l-2 border-black/40 font-bold text-red-600">AKŞAM</th>
+                          </tr>
+                       </thead>
+                       <tbody>
                           {(() => {
                             const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
                             const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
@@ -382,62 +392,91 @@ const ShiftEngineTab = () => {
                               return a.localeCompare(b);
                             });
 
-                            return currentDepts.map((dept, deptIdx) => {
-                                const deptRows = generatedGrid.filter(r => r.department === dept);
-                                if (deptRows.length === 0) return null;
+                            let globalRowCounter = 1;
+                            const deptTotals: any[] = []; // for daily summary table
 
-                                const dailyTotals = getWeekDates(selectedWeekStart).map(dateStr => {
-                                    let sabahCount = 0;
-                                    let aksamCount = 0;
-                                    deptRows.forEach(r => {
-                                        const val = r.shifts[dateStr] || '';
-                                        if (val.startsWith('S')) sabahCount++;
-                                        else if (val.startsWith('A')) aksamCount++;
+                            return (
+                                <>
+                                {currentDepts.map((dept, deptIdx) => {
+                                    const deptRows = generatedGrid.filter(r => r.department === dept);
+                                    if (deptRows.length === 0) return null;
+
+                                    const dailyTotals = getWeekDates(selectedWeekStart).map(dateStr => {
+                                        let sabahCount = 0;
+                                        let aksamCount = 0;
+                                        deptRows.forEach(r => {
+                                            const val = r.shifts[dateStr] || '';
+                                            if (val.startsWith('S')) sabahCount++;
+                                            else if (val.startsWith('A')) aksamCount++;
+                                        });
+                                        return { sabah: sabahCount, aksam: aksamCount };
                                     });
-                                    return { sabah: sabahCount, aksam: aksamCount };
-                                });
+                                    deptTotals.push({ dept, dailyTotals });
 
-                                return (
-                                  <Fragment key={dept}>
-                                      {deptRows.map((row, rIdx) => (
-                                          <TableRow key={row.personnel_id} className={rIdx % 2 === 0 ? 'bg-background' : 'bg-muted/10'}>
-                                              <TableCell className="font-semibold border-r">{row.adSoyad}</TableCell>
-                                              <TableCell className="text-xs text-muted-foreground border-r">{row.department}</TableCell>
-                                              {getWeekDates(selectedWeekStart).map(dateStr => {
-                                                  const val = row.shifts[dateStr] || '';
-                                                  return (
-                                                      <TableCell key={dateStr} className="p-1 border-r border-border/50">
-                                                          <select 
-                                                            className={`w-full h-full text-center p-2 rounded outline-none font-bold text-xs ring-1 ring-inset ${val.startsWith('S') ? 'bg-yellow-50 text-yellow-700 ring-yellow-200' : val.startsWith('A') ? 'bg-indigo-50 text-indigo-700 ring-indigo-200' : val === 'İ' ? 'bg-green-50 text-green-700 ring-green-200' : val === 'R' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-transparent ring-border'}`}
-                                                            value={val}
-                                                            onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
-                                                          >
-                                                            {engineContext.shiftCodes.map((c: any) => (
-                                                                <option key={c.code} value={c.code}>{c.label}</option>
-                                                            ))}
-                                                          </select>
-                                                      </TableCell>
-                                                  );
-                                              })}
-                                          </TableRow>
-                                      ))}
-                                      {/* Seperator & Summary Row */}
-                                      <TableRow className="bg-primary/5 hover:bg-primary/5 font-semibold">
-                                          <TableCell colSpan={2} className="text-right border-r border-b-4 border-b-primary/20 text-xs">Günlük ({dept}) Toplamı:</TableCell>
-                                          {dailyTotals.map((totals, i) => (
-                                              <TableCell key={i} className="text-center p-2 border-r border-b-4 border-b-primary/20">
-                                                  <div className="flex flex-col gap-1 items-center justify-center">
-                                                     <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full whitespace-nowrap">{totals.sabah}/S - {totals.aksam}/A</span>
-                                                  </div>
-                                              </TableCell>
-                                          ))}
-                                      </TableRow>
-                                  </Fragment>
-                                );
-                            });
+                                    return (
+                                      <Fragment key={dept}>
+                                          {deptRows.map((row, rIdx) => {
+                                              const aksamTotal = getWeekDates(selectedWeekStart).filter(d => (row.shifts[d] || '').startsWith('A')).length;
+                                              return (
+                                                  <tr key={row.personnel_id} className="border-b border-black/20 hover:bg-black/5">
+                                                      <td className="text-center font-bold text-xs border-r border-black/20">{globalRowCounter++}</td>
+                                                      <td className="font-bold border-r border-black/20 pl-3 uppercase">{row.adSoyad}</td>
+                                                      <td className="font-bold italic text-xs border-r border-black/20 pl-3 uppercase">{row.department}</td>
+                                                      {getWeekDates(selectedWeekStart).map(dateStr => {
+                                                          const val = row.shifts[dateStr] || '';
+                                                          return (
+                                                              <td key={dateStr} className="p-0 border-r border-black/20">
+                                                                  <select 
+                                                                    className="w-full h-full min-h-[32px] text-center bg-transparent outline-none font-bold text-sm cursor-pointer hover:bg-black/5 appearance-none"
+                                                                    value={val}
+                                                                    onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
+                                                                  >
+                                                                    {engineContext.shiftCodes.map((c: any) => (
+                                                                        <option key={c.code} value={c.code}>{c.label}</option>
+                                                                    ))}
+                                                                  </select>
+                                                              </td>
+                                                          );
+                                                      })}
+                                                      <td className="text-center font-bold border-l-2 border-black/40">{aksamTotal > 0 ? aksamTotal : ''}</td>
+                                                  </tr>
+                                              );
+                                          })}
+                                          {/* Boş satır ile reyonları ayır (Excel'deki gibi) */}
+                                          {deptIdx < currentDepts.length - 1 && (
+                                              <tr className="h-6 border-b-2 border-black/40 bg-gray-50">
+                                                  <td colSpan={11}></td>
+                                              </tr>
+                                          )}
+                                      </Fragment>
+                                    );
+                                })}
+
+                                {/* En alt Genel Özet Tablosu */}
+                                <tr className="h-8 border-t-4 border-black/60 bg-gray-100">
+                                    <td colSpan={11}></td>
+                                </tr>
+                                <tr className="bg-yellow-200 border-y border-black/40 font-bold text-red-600 text-center">
+                                    <td colSpan={3} className="text-right pr-4 border-r border-black/40">AKŞAM TOPLAM</td>
+                                    {getWeekDates(selectedWeekStart).map((dateStr, i) => {
+                                        const sumA = deptTotals.reduce((acc, curr) => acc + curr.dailyTotals[i].aksam, 0);
+                                        return <td key={dateStr} className="border-r border-black/40 text-black">{sumA}</td>;
+                                    })}
+                                    <td className="bg-gray-100 border-l-2 border-black/40"></td>
+                                </tr>
+                                <tr className="bg-yellow-100 border-b-2 border-black/40 font-bold text-red-600 text-center">
+                                    <td colSpan={3} className="text-right pr-4 border-r border-black/40">SABAH TOPLAM</td>
+                                    {getWeekDates(selectedWeekStart).map((dateStr, i) => {
+                                        const sumS = deptTotals.reduce((acc, curr) => acc + curr.dailyTotals[i].sabah, 0);
+                                        return <td key={dateStr} className="border-r border-black/40 text-black">{sumS}</td>;
+                                    })}
+                                    <td className="bg-gray-100 border-l-2 border-black/40"></td>
+                                </tr>
+                                </>
+                            );
                           })()}
-                       </TableBody>
-                    </Table>
+                       </tbody>
+                    </table>
                  </div>
              </div>
           </div>
