@@ -291,6 +291,7 @@ const LogisticsTracking = () => {
                              if (tNumber) {
                                  navigator.clipboard.writeText(tNumber);
                                  toast.success('Takip numarası kopyalandı!');
+                                 window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${tNumber}`, '_blank');
                              }
                           }}
                           className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-800 transition-colors text-left"
