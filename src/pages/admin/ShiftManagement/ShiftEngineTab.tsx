@@ -39,7 +39,7 @@ const ShiftEngineTab = () => {
         ] = await Promise.all([
           supabase.from('personnel').select('*').eq('is_active', true),
           supabase.from('personnel_movements').select('*'),
-          supabase.from('weekly_day_off').select('*').in('status', ['approved', 'pending']), // Default to accepting if pending, as old records have it
+          supabase.from('weekly_day_off').select('*'),
           supabase.from('department_shift_rules').select('*'),
           supabase.from('shift_schedules').select('*').gte('shift_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
           supabase.from('shift_preferences').select('*').eq('status', 'approved'),
@@ -147,7 +147,10 @@ const ShiftEngineTab = () => {
       // Step 2: Map explicit Day Offs (Haftalık İzin)
       deptStaff.forEach((p, idx) => {
         const row = rows[idx];
-        const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
+        const pDayOffs = engineContext.dayOffs.filter(d => 
+            d.personnel_id === p.id && 
+            (d.status === 'approved' || d.status === 'pending' || !d.status)
+        );
         
         weekDates.forEach((dateStr) => {
            const dObj = new Date(dateStr);
