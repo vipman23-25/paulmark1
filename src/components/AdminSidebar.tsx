@@ -1,4 +1,4 @@
-import { Users, Clock, Calendar, Bell, Timer, LogOut, LayoutDashboard, Activity, Settings, Umbrella, Target, Package, Truck, CalendarRange } from 'lucide-react';
+import { Users, Clock, Calendar, Bell, Timer, LogOut, LayoutDashboard, Activity, Settings, Umbrella, Target, Package, Truck, CalendarRange, ClipboardList } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +34,7 @@ const menuItems = [
   { title: 'Kargo Takip', url: '/admin/logistics', icon: Truck },
   { title: 'Duyurular', url: '/admin/reminders', icon: Bell },
   { title: 'Satış Hedefleri', url: '/admin/sales-targets', icon: Target },
+  { title: 'Görev Otomasyonu', url: '/admin/task-automations', icon: ClipboardList },
   { title: 'Sistem Ayarları', url: '/admin/settings', icon: Settings },
 ];
 

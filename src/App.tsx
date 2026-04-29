@@ -20,6 +20,7 @@ import SalesTargets from "./pages/admin/SalesTargets";
 import CargoManagement from "./pages/admin/CargoManagement";
 import LogisticsTracking from "./pages/admin/LogisticsTracking";
 import ShiftManagement from "./pages/admin/ShiftManagement";
+import TaskAutomation from "./pages/admin/TaskAutomation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="logistics" element={<LogisticsTracking />} />
               <Route path="reminders" element={<ReminderManagement />} />
               <Route path="sales-targets" element={<SalesTargets />} />
+              <Route path="task-automations" element={<TaskAutomation />} />
               <Route path="settings" element={<SystemSettingsView />} />
             </Route>
             <Route path="*" element={<NotFound />} />
