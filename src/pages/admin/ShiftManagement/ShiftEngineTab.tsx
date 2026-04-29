@@ -310,6 +310,21 @@ const ShiftEngineTab = () => {
       newGrid.push(...rows);
     });
 
+    const finalOrder = ['müdür', 'kasiyer', 'çocuk', 'kadın', 'bayan', 'erkek'];
+    newGrid.sort((a, b) => {
+        const aDept = a.originalDept.toLowerCase();
+        const bDept = b.originalDept.toLowerCase();
+
+        let ia = finalOrder.findIndex(dept => aDept.includes(dept));
+        let ib = finalOrder.findIndex(dept => bDept.includes(dept));
+
+        if (ia === -1) ia = 999;
+        if (ib === -1) ib = 999;
+
+        if (ia !== ib) return ia - ib;
+        return a.adSoyad.localeCompare(b.adSoyad);
+    });
+
     if (collisionError) {
         toast.error(collisionError, { duration: 8000 });
         return; 
