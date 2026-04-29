@@ -150,8 +150,11 @@ const ShiftEngineTab = () => {
         const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
         row.debug_dayoffs = pDayOffs;
         
-        weekDates.forEach((dateStr, dIdx) => {
-           const dayOfWeek = dIdx + 1; // 0=Mon->1, 1=Tue->2, ... 6=Sun->7
+        weekDates.forEach((dateStr) => {
+           const [yyyy, mm, dd] = dateStr.split('-');
+           const localDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+           let dayOfWeek = localDate.getDay();
+           if (dayOfWeek === 0) dayOfWeek = 7;
 
            if (pDayOffs.some(d => Number(d.day_of_week) === dayOfWeek) && !row.shifts[dateStr]) {
                row.shifts[dateStr] = 'İ'; // Haftalık izin
@@ -191,8 +194,11 @@ const ShiftEngineTab = () => {
       deptStaff.forEach((p, idx) => {
          const row = rows[idx];
          const pPrefs = engineContext.shiftPrefs.filter(sp => sp.personnel_id === p.id);
-         weekDates.forEach((dateStr, dIdx) => {
-             const dayOfWeek = dIdx + 1; // 0=Mon->1, 1=Tue->2, ... 6=Sun->7
+         weekDates.forEach((dateStr) => {
+             const [yyyy, mm, dd] = dateStr.split('-');
+             const localDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+             let dayOfWeek = localDate.getDay();
+             if (dayOfWeek === 0) dayOfWeek = 7;
 
              const pref = pPrefs.find(sp => Number(sp.day_of_week) === dayOfWeek);
              if (pref && !row.shifts[dateStr]) {
