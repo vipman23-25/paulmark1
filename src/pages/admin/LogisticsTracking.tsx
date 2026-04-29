@@ -182,8 +182,11 @@ const LogisticsTracking = () => {
           />
           <Button 
              size="sm" 
-             disabled={!trackingInquiry.trim()}
-             onClick={() => window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${trackingInquiry.trim()}`, '_blank', 'noopener,noreferrer')}
+             disabled={!trackingInquiry || !trackingInquiry.trim()}
+             onClick={(e) => {
+                 e.preventDefault();
+                 window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${trackingInquiry.trim()}`, '_blank');
+             }}
              className="h-9 whitespace-nowrap px-4"
           >
              Sorgula
@@ -302,14 +305,19 @@ const LogisticsTracking = () => {
                       <TableCell>{item.content_description}</TableCell>
                       <TableCell>
                         <button 
-                          onClick={() => {
-                             setTrackingInquiry(item.tracking_number);
-                             window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${item.tracking_number.trim()}`, '_blank', 'noopener,noreferrer');
+                          onClick={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             const tNumber = item.tracking_number ? String(item.tracking_number).trim() : '';
+                             setTrackingInquiry(tNumber);
+                             if (tNumber) {
+                                 window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${tNumber}`, '_blank');
+                             }
                           }}
                           className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-800 transition-colors text-left"
                           title="Sorgulamak için tıklayın"
                         >
-                          {item.tracking_number}
+                          {item.tracking_number || '-'}
                         </button>
                       </TableCell>
                       <TableCell className="text-right">
