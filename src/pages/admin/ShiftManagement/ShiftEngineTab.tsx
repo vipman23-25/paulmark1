@@ -312,8 +312,8 @@ const ShiftEngineTab = () => {
 
     const finalOrder = ['müdür', 'kasiyer', 'çocuk', 'kadın', 'bayan', 'erkek'];
     newGrid.sort((a, b) => {
-        const aDept = a.originalDept.toLowerCase();
-        const bDept = b.originalDept.toLowerCase();
+        const aDept = a.originalDept.toLocaleLowerCase('tr-TR');
+        const bDept = b.originalDept.toLocaleLowerCase('tr-TR');
 
         let ia = finalOrder.findIndex(dept => aDept.includes(dept));
         let ib = finalOrder.findIndex(dept => bDept.includes(dept));
@@ -322,7 +322,7 @@ const ShiftEngineTab = () => {
         if (ib === -1) ib = 999;
 
         if (ia !== ib) return ia - ib;
-        return a.adSoyad.localeCompare(b.adSoyad);
+        return a.adSoyad.localeCompare(b.adSoyad, 'tr-TR');
     });
 
     if (collisionError) {
@@ -477,12 +477,12 @@ const ShiftEngineTab = () => {
                             const finalOrder = ['müdür', 'kasiyer', 'çocuk', 'kadın', 'bayan', 'erkek'];
                             const currentDepts = Array.from(new Set(generatedGrid.map(r => r.originalDept)));
                             currentDepts.sort((a, b) => {
-                              let ia = finalOrder.findIndex(dept => a.toLowerCase().includes(dept));
-                              let ib = finalOrder.findIndex(dept => b.toLowerCase().includes(dept));
+                              let ia = finalOrder.findIndex(dept => a.toLocaleLowerCase('tr-TR').includes(dept));
+                              let ib = finalOrder.findIndex(dept => b.toLocaleLowerCase('tr-TR').includes(dept));
                               if (ia === -1) ia = 999;
                               if (ib === -1) ib = 999;
                               if (ia !== ib) return ia - ib;
-                              return a.localeCompare(b);
+                              return a.localeCompare(b, 'tr-TR');
                             });
 
                             let globalRowCounter = 1;
