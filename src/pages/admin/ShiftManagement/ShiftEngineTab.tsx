@@ -208,14 +208,14 @@ const ShiftEngineTab = () => {
           let targetS = 0;
           let targetA = 0;
 
-          // Distribution Rules based on Active Worker Count
-          if (totalActive === 2) { targetS = 1; targetA = 1; }
+          // Distribution Rules based on Active Worker Count (Evening MUST be > Morning)
+          if (totalActive === 2) { targetS = 0; targetA = 2; }
           else if (totalActive === 3) { targetS = 1; targetA = 2; }
-          else if (totalActive === 4) { targetS = 2; targetA = 2; }
+          else if (totalActive === 4) { targetS = 1; targetA = 3; }
           else if (totalActive === 5) { targetS = 2; targetA = 3; }
           else if (totalActive === 6) { targetS = 2; targetA = 4; }
-          else if (totalActive >= 7) { targetS = 3; targetA = 4; }
-          else if (totalActive === 1) { targetS = 0; targetA = 1; } // Always prioritize Evening when 1 left
+          else if (totalActive >= 7) { targetS = 3; targetA = totalActive - 3; }
+          else if (totalActive === 1) { targetS = 0; targetA = 1; }
 
           let currentS = 0;
           let currentA = 0;
@@ -242,6 +242,11 @@ const ShiftEngineTab = () => {
 
               if (rAWeekAksam >= 4) scoreA += 100; // Force S
               if (rBWeekAksam >= 4) scoreB += 100;
+
+              // 2.5 Weekly MIN 3 Evenings Rule
+              const remainingDays = 7 - dIdx;
+              if (rAWeekAksam + remainingDays <= 3) scoreA -= 200; // MUST give A
+              if (rBWeekAksam + remainingDays <= 3) scoreB -= 200; // MUST give A
 
               // 3. Preferences (Onaylı Tercihler)
               if (rA.preferredShift[dateStr] === 'S') scoreA += 50;
