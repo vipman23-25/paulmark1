@@ -39,7 +39,7 @@ const ShiftEngineTab = () => {
         ] = await Promise.all([
           supabase.from('personnel').select('*').eq('is_active', true),
           supabase.from('personnel_movements').select('*'),
-          supabase.from('weekly_day_off').select('*').eq('status', 'approved'),
+          supabase.from('weekly_day_off').select('*').in('status', ['approved', 'pending']), // Default to accepting if pending, as old records have it
           supabase.from('department_shift_rules').select('*'),
           supabase.from('shift_schedules').select('*').gte('shift_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
           supabase.from('shift_preferences').select('*').eq('status', 'approved'),
@@ -155,11 +155,7 @@ const ShiftEngineTab = () => {
            if (dayOfWeek === 0) dayOfWeek = 7; // Sunday is 7
 
            if (pDayOffs.some(d => d.day_of_week === dayOfWeek) && !row.shifts[dateStr]) {
-               if (dayOfWeek === 6 || dayOfWeek === 7) {
-                   toast.warning(`${row.adSoyad} için hafta sonu izni tespit edildi, motor tarafından atlanacak.`);
-               } else {
-                   row.shifts[dateStr] = 'İ'; // Haftalık izin
-               }
+               row.shifts[dateStr] = 'İ'; // Haftalık izin
            }
         });
       });
