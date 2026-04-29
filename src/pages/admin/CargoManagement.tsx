@@ -17,7 +17,6 @@ const CargoManagement = () => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [trackingNumber, setTrackingNumber] = useState('');
   
   const [form, setForm] = useState({
     arrival_date: new Date().toISOString().split('T')[0],
@@ -210,29 +209,11 @@ const CargoManagement = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-card p-4 rounded-xl border gap-4">
-        <h2 className="text-2xl font-bold flex items-center gap-2 whitespace-nowrap">
+      <div className="flex justify-between items-center bg-card p-4 rounded-xl border">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
           <Package className="w-6 h-6 text-primary" /> Koli / Sevkiyat Takibi
         </h2>
-        
-        <div className="flex items-center gap-2 w-full lg:w-auto bg-muted/30 p-1.5 rounded-lg border border-border/50">
-          <Input 
-             placeholder="DHL Takip No..." 
-             value={trackingNumber}
-             onChange={e => setTrackingNumber(e.target.value)}
-             className="bg-background h-9 lg:w-[200px]"
-          />
-          <Button 
-             size="sm" 
-             disabled={!trackingNumber.trim()}
-             onClick={() => window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${trackingNumber.trim()}`, '_blank', 'noopener,noreferrer')}
-             className="h-9 whitespace-nowrap px-4"
-          >
-             Sorgula
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+        <div className="flex items-center gap-3">
           <Button variant="outline" onClick={handleExportExcel} className="hidden sm:flex">
             <Download className="w-4 h-4 mr-2" /> Excel'e Aktar
           </Button>

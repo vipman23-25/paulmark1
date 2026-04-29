@@ -19,6 +19,7 @@ const LogisticsTracking = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCompaniesOpen, setIsCompaniesOpen] = useState(false);
   const [newCompany, setNewCompany] = useState('');
+  const [trackingInquiry, setTrackingInquiry] = useState('');
 
   const [form, setForm] = useState({
     company_name: '',
@@ -167,11 +168,29 @@ const LogisticsTracking = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-card p-4 rounded-xl border gap-4">
-        <h2 className="text-2xl font-bold flex items-center gap-2 text-primary">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-card p-4 rounded-xl border gap-4">
+        <h2 className="text-2xl font-bold flex items-center gap-2 text-primary whitespace-nowrap">
           <Truck className="w-6 h-6" /> Kargo Takip
         </h2>
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+
+        <div className="flex items-center gap-2 w-full lg:w-auto bg-muted/30 p-1.5 rounded-lg border border-border/50">
+          <Input 
+             placeholder="DHL Takip No Sorgula..." 
+             value={trackingInquiry}
+             onChange={e => setTrackingInquiry(e.target.value)}
+             className="bg-background h-9 lg:w-[200px]"
+          />
+          <Button 
+             size="sm" 
+             disabled={!trackingInquiry.trim()}
+             onClick={() => window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${trackingInquiry.trim()}`, '_blank', 'noopener,noreferrer')}
+             className="h-9 whitespace-nowrap px-4"
+          >
+             Sorgula
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
           <Dialog open={isCompaniesOpen} onOpenChange={setIsCompaniesOpen}>
             <DialogTrigger asChild>
               <Button variant="secondary" className="flex-1 md:flex-none"><Settings className="w-4 h-4 mr-2" /> Kargo Firmaları</Button>
