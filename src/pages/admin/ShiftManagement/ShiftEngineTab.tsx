@@ -86,7 +86,6 @@ const ShiftEngineTab = () => {
     if (!selectedWeekStart) return toast.error('Lütfen haftanın başlama tarihi (Pazartesi) seçiniz.');
     if (!engineContext) return;
 
-    // VERY BASIC GENERATOR ALGORITHM implementation based on Phase 4 spec
     const weekDates = getWeekDates(selectedWeekStart);
     const newGrid: any[] = [];
 
@@ -97,6 +96,8 @@ const ShiftEngineTab = () => {
         }
         return dept;
     };
+
+    const isAbsence = (code: string) => ['İ', 'R', 'Yİ', 'Üİ', 'ÜS'].includes(code);
 
     const targetOrder = ['Müdür', 'Kadın & Çocuk Reyon', 'Erkek Reyon', 'Kasiyer'];
     const depts = Array.from(new Set(engineContext.personnel.map((p: any) => getVirtualDept(p.department))));
@@ -115,114 +116,109 @@ const ShiftEngineTab = () => {
       const deptStaff = engineContext.personnel.filter(p => getVirtualDept(p.department) === dept);
       const rows: any[] = [];
       
-      // Step 1: Initialize rows and map absences (Rule 4)
+      // Step 1: Initialize rows and map absences
       deptStaff.forEach(p => {
-        const row: any = { personnel_id: p.id, adSoyad: `${p.first_name} ${p.last_name}`, department: dept, originalDept: p.department, shifts: {} };
+        const row: any = { personnel_id: p.id, adSoyad: `${p.first_name} ${p.last_name}`, department: dept, originalDept: p.department, shifts: {}, preferredShift: {} };
         const pMovements = engineContext.movements.filter(m => m.personnel_id === p.id);
         
         weekDates.forEach((dateStr) => {
             const hasMovement = pMovements.find(m => m.start_date <= dateStr && (!m.end_date || m.end_date >= dateStr));
             if (hasMovement && hasMovement.movement_type) {
-                row.shifts[dateStr] = hasMovement.movement_type;
+                row.shifts[dateStr] = hasMovement.movement_type; // e.g. R, Yİ
             }
         });
         rows.push(row);
       });
 
-      // Müdür için atama döngüsünden çık
+      // Müdür için atama döngüsünden çık (Tamamen boş kalır)
       if (dept.toLowerCase().includes('müdür')) {
+          weekDates.forEach((dateStr) => {
+             rows.forEach(r => r.shifts[dateStr] = ''); 
+          });
           newGrid.push(...rows);
-          return; // Continue to next dept
+          return; 
       }
 
-      // Step 2: Map explicit Day Offs (Rule 1)
+      // Step 2: Map explicit Day Offs (Haftalık İzin)
       deptStaff.forEach((p, idx) => {
         const row = rows[idx];
         const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
         
         weekDates.forEach((dateStr, dIdx) => {
            const dayOfWeek = dIdx + 1; // 1: Mon, ... 7: Sun
-           if (pDayOffs.some(d => d.day_of_week === dayOfWeek) && row.shifts[dateStr] !== 'R') {
-               // Enforce no weekend day-offs
+           if (pDayOffs.some(d => d.day_of_week === dayOfWeek) && !row.shifts[dateStr]) {
                if (dayOfWeek === 6 || dayOfWeek === 7) {
                    toast.warning(`${row.adSoyad} için hafta sonu izni tespit edildi, motor tarafından atlanacak.`);
                } else {
-                   row.shifts[dateStr] = 'İ';
+                   row.shifts[dateStr] = 'İ'; // Haftalık izin
                }
            }
         });
       });
 
-      // Step 3: Auto-assign missing Day Offs (Rule 1)
+      // Step 3: Auto-assign missing Day Offs
       deptStaff.forEach((p, idx) => {
         const row = rows[idx];
-        const hasDayOff = weekDates.some(d => row.shifts[d] === 'İ' || row.shifts[d] === 'R');
+        const hasDayOff = weekDates.some(d => isAbsence(row.shifts[d]));
         if (!hasDayOff) {
-            // Find a valid day (Mon-Fri) that minimizes collision
             let assigned = false;
             for (let d = 0; d < 5; d++) {
                 const dateStr = weekDates[d];
-                const countOff = rows.filter(r => r.shifts[dateStr] === 'İ' || r.shifts[dateStr] === 'R').length;
+                const countOff = rows.filter(r => isAbsence(r.shifts[dateStr])).length;
                 if (countOff === 0) {
                     row.shifts[dateStr] = 'İ';
                     assigned = true;
                     break;
                 }
             }
-            if (!assigned) row.shifts[weekDates[0]] = 'İ'; // Fallback
+            if (!assigned) row.shifts[weekDates[0]] = 'İ'; 
         }
       });
 
-      // Step 4: Collision Check (Rule 2)
+      // Step 4: Collision Check
       weekDates.forEach(dateStr => {
-          const offStaff = rows.filter(r => r.shifts[dateStr] === 'İ' || r.shifts[dateStr] === 'R');
-          // If 2 or more people in the SAME department are off on the SAME day
+          const offStaff = rows.filter(r => isAbsence(r.shifts[dateStr]));
           if (offStaff.length >= 2 && deptStaff.length >= 2) {
               const names = offStaff.map(r => r.adSoyad).join(", ");
-              collisionError = `Hata: ${dept} reyonunda ${names} aynı gün (${dateStr}) izin/rapor durumundadır. Lütfen bu çakışmayı giderip tekrar deneyin.`;
+              collisionError = `Hata: ${dept} reyonunda ${names} aynı gün (${dateStr}) izin/rapor durumundadır. Lütfen hareketleri kontrol edin.`;
           }
       });
 
-      // Step 5: Special Requests (Preferences) (Rule 3)
+      // Step 5: Special Requests (Preferences)
       deptStaff.forEach((p, idx) => {
          const row = rows[idx];
          const pPrefs = engineContext.shiftPrefs.filter(sp => sp.personnel_id === p.id);
          weekDates.forEach((dateStr, dIdx) => {
              const dayOfWeek = dIdx + 1;
              const pref = pPrefs.find(sp => sp.day_of_week === dayOfWeek);
-             if (pref && !row.shifts[dateStr]) { // Only if not R or İ
-                 row.shifts[dateStr] = pref.requested_shift === 'Sabah' ? 'S' : 'A';
+             if (pref && !row.shifts[dateStr]) {
+                 row.preferredShift[dateStr] = pref.requested_shift === 'Sabah' ? 'S' : 'A';
              }
          });
       });
 
-      // Step 6: Distribution Algorithm (Rule 5)
+      // Step 6: Distribution Algorithm based on ACTIVE staff
       weekDates.forEach((dateStr, dIdx) => {
           const unassignedRows = rows.filter(r => !r.shifts[dateStr]);
           if (unassignedRows.length === 0) return;
 
-          const activeRows = rows.filter(r => r.shifts[dateStr] !== 'İ' && r.shifts[dateStr] !== 'R');
-          const totalActive = activeRows.length;
+          const activeRows = rows.filter(r => !isAbsence(r.shifts[dateStr]));
+          const totalActive = activeRows.length; // Remaining active people today
           
           let targetS = 0;
           let targetA = 0;
 
+          // Distribution Rules based on Active Worker Count
           if (totalActive === 2) { targetS = 1; targetA = 1; }
           else if (totalActive === 3) { targetS = 1; targetA = 2; }
           else if (totalActive === 4) { targetS = 2; targetA = 2; }
           else if (totalActive === 5) { targetS = 2; targetA = 3; }
           else if (totalActive === 6) { targetS = 2; targetA = 4; }
-          else if (totalActive >= 7) { targetS = 3; targetA = totalActive - 3; }
-          else if (totalActive === 1) { targetS = 0; targetA = 1; } // Prioritize A when 1 left
+          else if (totalActive >= 7) { targetS = 3; targetA = 4; }
+          else if (totalActive === 1) { targetS = 0; targetA = 1; } // Always prioritize Evening when 1 left
 
-          const dRule = engineContext.deptRules.find(r => r.department_name === dept);
-          if (dRule) {
-             if (dRule.override_morning_count !== null) targetS = dRule.override_morning_count;
-             if (dRule.override_evening_count !== null) targetA = dRule.override_evening_count;
-          }
-
-          let currentS = activeRows.filter(r => r.shifts[dateStr] === 'S').length;
-          let currentA = activeRows.filter(r => r.shifts[dateStr] === 'A').length;
+          let currentS = 0;
+          let currentA = 0;
 
           // Rotation & Balancing Logic
           unassignedRows.sort((rA, rB) => {
@@ -230,43 +226,52 @@ const ShiftEngineTab = () => {
               const rAPrev = prevDateStr ? rA.shifts[prevDateStr] : null;
               const rBPrev = prevDateStr ? rB.shifts[prevDateStr] : null;
 
-              let scoreA = 0;
+              let scoreA = 0; // High score = give S, Low score = give A
               let scoreB = 0;
 
               // 1. Rotation (Avoid same shift consecutively)
-              if (rAPrev === 'S') scoreA -= 10;
-              if (rAPrev === 'A') scoreA += 10;
+              if (rAPrev === 'S') scoreA -= 20; // Needs A
+              if (rAPrev === 'A') scoreA += 20; // Needs S
 
-              if (rBPrev === 'S') scoreB -= 10;
-              if (rBPrev === 'A') scoreB += 10;
+              if (rBPrev === 'S') scoreB -= 20;
+              if (rBPrev === 'A') scoreB += 20;
 
-              // 2. Weekly Max 4 Evenings (Fairness Rule)
+              // 2. Weekly Max 4 Evenings (Adalet Kuralı)
               const rAWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rA.shifts[d])).length;
               const rBWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rB.shifts[d])).length;
 
-              if (rAWeekAksam >= 4) scoreA += 50; // High priority for S
-              if (rBWeekAksam >= 4) scoreB += 50;
+              if (rAWeekAksam >= 4) scoreA += 100; // Force S
+              if (rBWeekAksam >= 4) scoreB += 100;
 
-              // 3. Monthly Balance
+              // 3. Preferences (Onaylı Tercihler)
+              if (rA.preferredShift[dateStr] === 'S') scoreA += 50;
+              if (rA.preferredShift[dateStr] === 'A') scoreA -= 50;
+
+              if (rB.preferredShift[dateStr] === 'S') scoreB += 50;
+              if (rB.preferredShift[dateStr] === 'A') scoreB -= 50;
+
+              // 4. Monthly Balance
               const pastSabahCountA = engineContext.pastSchedules.filter(s => s.personnel_id === rA.personnel_id && ['S', 'Sabah'].includes(s.shift_type)).length;
               const pastAksamCountA = engineContext.pastSchedules.filter(s => s.personnel_id === rA.personnel_id && ['A', 'Akşam'].includes(s.shift_type)).length;
-              if (pastAksamCountA > pastSabahCountA) scoreA += 5;
+              if (pastAksamCountA > pastSabahCountA) scoreA += 10; // Needs S
 
               const pastSabahCountB = engineContext.pastSchedules.filter(s => s.personnel_id === rB.personnel_id && ['S', 'Sabah'].includes(s.shift_type)).length;
               const pastAksamCountB = engineContext.pastSchedules.filter(s => s.personnel_id === rB.personnel_id && ['A', 'Akşam'].includes(s.shift_type)).length;
-              if (pastAksamCountB > pastSabahCountB) scoreB += 5;
+              if (pastAksamCountB > pastSabahCountB) scoreB += 10;
 
-              return scoreB - scoreA; // Descending order (highest S score first)
+              return scoreB - scoreA; // Descending order (highest score gets S first)
           });
 
+          // Assignment loop
           unassignedRows.forEach(row => {
              let assignS = false;
+             
              if (currentS < targetS && currentA < targetA) {
-                 assignS = true; // since it's sorted, give S to the top scorer
+                 assignS = true; // Top scorer gets S
              } else if (currentS < targetS) {
-                 assignS = true;
+                 assignS = true; // Forced S because A is full
              } else {
-                 assignS = false;
+                 assignS = false; // Forced A because S is full
              }
 
              if (assignS) {
@@ -284,7 +289,7 @@ const ShiftEngineTab = () => {
 
     if (collisionError) {
         toast.error(collisionError, { duration: 8000 });
-        return; // İşlemi durdur
+        return; 
     }
 
     setGeneratedGrid(newGrid);
