@@ -122,7 +122,12 @@ const ShiftEngineTab = () => {
         const pMovements = engineContext.movements.filter(m => m.personnel_id === p.id);
         
         weekDates.forEach((dateStr) => {
-            const hasMovement = pMovements.find(m => m.start_date <= dateStr && (!m.end_date || m.end_date >= dateStr));
+            const hasMovement = pMovements.find(m => {
+                if (!m.start_date) return false;
+                const mStart = m.start_date.substring(0, 10);
+                const mEnd = m.end_date ? m.end_date.substring(0, 10) : mStart;
+                return mStart <= dateStr && mEnd >= dateStr;
+            });
             if (hasMovement && hasMovement.movement_type) {
                 row.shifts[dateStr] = hasMovement.movement_type; // e.g. R, Yİ
             }
@@ -144,8 +149,11 @@ const ShiftEngineTab = () => {
         const row = rows[idx];
         const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
         
-        weekDates.forEach((dateStr, dIdx) => {
-           const dayOfWeek = dIdx + 1; // 1: Mon, ... 7: Sun
+        weekDates.forEach((dateStr) => {
+           const dObj = new Date(dateStr);
+           let dayOfWeek = dObj.getDay();
+           if (dayOfWeek === 0) dayOfWeek = 7; // Sunday is 7
+
            if (pDayOffs.some(d => d.day_of_week === dayOfWeek) && !row.shifts[dateStr]) {
                if (dayOfWeek === 6 || dayOfWeek === 7) {
                    toast.warning(`${row.adSoyad} için hafta sonu izni tespit edildi, motor tarafından atlanacak.`);
@@ -188,8 +196,11 @@ const ShiftEngineTab = () => {
       deptStaff.forEach((p, idx) => {
          const row = rows[idx];
          const pPrefs = engineContext.shiftPrefs.filter(sp => sp.personnel_id === p.id);
-         weekDates.forEach((dateStr, dIdx) => {
-             const dayOfWeek = dIdx + 1;
+         weekDates.forEach((dateStr) => {
+             const dObj = new Date(dateStr);
+             let dayOfWeek = dObj.getDay();
+             if (dayOfWeek === 0) dayOfWeek = 7;
+
              const pref = pPrefs.find(sp => sp.day_of_week === dayOfWeek);
              if (pref && !row.shifts[dateStr]) {
                  row.preferredShift[dateStr] = pref.requested_shift === 'Sabah' ? 'S' : 'A';
