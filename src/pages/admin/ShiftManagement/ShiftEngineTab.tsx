@@ -208,8 +208,8 @@ const ShiftEngineTab = () => {
           let targetS = 0;
           let targetA = 0;
 
-          // Distribution Rules based on Active Worker Count (Evening MUST be > Morning)
-          if (totalActive === 2) { targetS = 0; targetA = 2; }
+          // Distribution Rules based on Active Worker Count (Evening > Morning generally, but 2 people is 1S 1A)
+          if (totalActive === 2) { targetS = 1; targetA = 1; }
           else if (totalActive === 3) { targetS = 1; targetA = 2; }
           else if (totalActive === 4) { targetS = 1; targetA = 3; }
           else if (totalActive === 5) { targetS = 2; targetA = 3; }
@@ -240,6 +240,9 @@ const ShiftEngineTab = () => {
               const rAWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rA.shifts[d])).length;
               const rBWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rB.shifts[d])).length;
 
+              const rAWeekSabah = weekDates.filter(d => ['S', 'S+M', 'S+D'].includes(rA.shifts[d])).length;
+              const rBWeekSabah = weekDates.filter(d => ['S', 'S+M', 'S+D'].includes(rB.shifts[d])).length;
+
               if (rAWeekAksam >= 4) scoreA += 100; // Force S
               if (rBWeekAksam >= 4) scoreB += 100;
 
@@ -247,6 +250,10 @@ const ShiftEngineTab = () => {
               const remainingDays = 7 - dIdx;
               if (rAWeekAksam + remainingDays <= 3) scoreA -= 200; // MUST give A
               if (rBWeekAksam + remainingDays <= 3) scoreB -= 200; // MUST give A
+
+              // 2.6 If unbalanced, Evening must be greater than Morning
+              if (rAWeekSabah > rAWeekAksam) scoreA -= 150; // Needs A heavily
+              if (rBWeekSabah > rBWeekAksam) scoreB -= 150; // Needs A heavily
 
               // 3. Preferences (Onaylı Tercihler)
               if (rA.preferredShift[dateStr] === 'S') scoreA += 50;
