@@ -72,12 +72,27 @@ const ShiftEngineTab = () => {
   });
 
   const getWeekDates = (startStr: string) => {
+    if (!startStr) return [];
     const dates = [];
     const startObj = new Date(startStr);
+    
+    // Yıllık timezone/gün kaymasını önlemek için yerel saati kullan ve o haftanın Pazartesisine git
+    let day = startObj.getDay();
+    if (day === 0) day = 7; // Pazar
+    
+    // Seçilen tarihten kaç gün geriye gideceğimizi bul (Pazartesiye ulaşmak için)
+    const diff = day - 1;
+    startObj.setDate(startObj.getDate() - diff);
+    
     for (let i = 0; i < 7; i++) {
         const d = new Date(startObj);
         d.setDate(d.getDate() + i);
-        dates.push(d.toISOString().split('T')[0]);
+        
+        // Yerel saate göre YYYY-MM-DD formatını güvenli bir şekilde al
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const dayOfMonth = String(d.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${dayOfMonth}`);
     }
     return dates;
   };
