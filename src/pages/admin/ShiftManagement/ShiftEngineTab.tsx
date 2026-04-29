@@ -147,17 +147,14 @@ const ShiftEngineTab = () => {
       // Step 2: Map explicit Day Offs (Haftalık İzin)
       deptStaff.forEach((p, idx) => {
         const row = rows[idx];
-        const pDayOffs = engineContext.dayOffs.filter(d => 
-            d.personnel_id === p.id && 
-            (d.status === 'approved' || d.status === 'pending' || !d.status)
-        );
+        const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
         
         weekDates.forEach((dateStr) => {
            const dObj = new Date(dateStr);
            let dayOfWeek = dObj.getDay();
            if (dayOfWeek === 0) dayOfWeek = 7; // Sunday is 7
 
-           if (pDayOffs.some(d => d.day_of_week === dayOfWeek) && !row.shifts[dateStr]) {
+           if (pDayOffs.some(d => Number(d.day_of_week) === dayOfWeek) && !row.shifts[dateStr]) {
                row.shifts[dateStr] = 'İ'; // Haftalık izin
            }
         });
