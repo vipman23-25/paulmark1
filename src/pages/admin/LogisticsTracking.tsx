@@ -300,7 +300,18 @@ const LogisticsTracking = () => {
                       <TableCell className="font-medium">{format(new Date(item.shipment_date), 'dd MMM yyyy', { locale: tr })}</TableCell>
                       <TableCell><span className="px-2 py-1 bg-muted rounded-md text-xs font-semibold">{item.company_name}</span></TableCell>
                       <TableCell>{item.content_description}</TableCell>
-                      <TableCell><span className="font-mono text-sm">{item.tracking_number}</span></TableCell>
+                      <TableCell>
+                        <button 
+                          onClick={() => {
+                             setTrackingInquiry(item.tracking_number);
+                             window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${item.tracking_number.trim()}`, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-800 transition-colors text-left"
+                          title="Sorgulamak için tıklayın"
+                        >
+                          {item.tracking_number}
+                        </button>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
                           <Pencil className="w-4 h-4 text-blue-500" />
