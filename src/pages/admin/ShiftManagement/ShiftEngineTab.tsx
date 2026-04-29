@@ -535,12 +535,21 @@ const ShiftEngineTab = () => {
                                                   </tr>
                                               );
                                           })}
-                                          {/* Boş satır ile reyonları ayır (Excel'deki gibi) */}
-                                          {deptIdx < currentDepts.length - 1 && (
-                                              <tr className="h-6 border-b-2 border-black/40 bg-gray-50">
-                                                  <td colSpan={11}></td>
-                                              </tr>
-                                          )}
+                                          {/* Boş satır ile reyonları ayır (Excel'deki gibi), ancak Çocuk ve Kadın arasına boşluk koyma */}
+                                          {(() => {
+                                              if (deptIdx >= currentDepts.length - 1) return null;
+                                              const currentLower = dept.toLocaleLowerCase('tr-TR');
+                                              const nextDept = currentDepts[deptIdx + 1].toLocaleLowerCase('tr-TR');
+                                              const isCocukAndKadin = currentLower.includes('çocuk') && (nextDept.includes('kadın') || nextDept.includes('bayan'));
+                                              
+                                              if (isCocukAndKadin) return null;
+
+                                              return (
+                                                  <tr className="h-6 border-b-2 border-black/40 bg-gray-50">
+                                                      <td colSpan={11}></td>
+                                                  </tr>
+                                              );
+                                          })()}
                                       </Fragment>
                                     );
                                 })}
