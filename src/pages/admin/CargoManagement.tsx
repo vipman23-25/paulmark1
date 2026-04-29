@@ -257,8 +257,12 @@ const CargoManagement = () => {
                   <Input 
                     type="number" 
                     min="0"
+                    max={form.total_boxes}
                     value={form.counted_boxes} 
-                    onChange={e => setForm({...form, counted_boxes: parseInt(e.target.value) || 0})} 
+                    onChange={e => {
+                      const val = parseInt(e.target.value) || 0;
+                      setForm({...form, counted_boxes: Math.min(val, form.total_boxes)});
+                    }} 
                   />
                 </div>
               </div>

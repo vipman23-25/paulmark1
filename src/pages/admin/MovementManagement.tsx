@@ -38,9 +38,9 @@ const MovementManagement = () => {
     queryFn: async () => {
       const { data, error } = await supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').single();
       if (!error && data?.setting_value?.movementTypes) {
-        return data.setting_value.movementTypes as string[];
+        return data.setting_value.movementTypes;
       }
-      return ['İzin', 'Hastalık İzni', 'Muafiyet', 'Başka Görev'];
+      return [{ code: 'İ', label: 'İzin' }, { code: 'R', label: 'Hastalık İzni' }, { code: 'M', label: 'Muafiyet' }, { code: 'B', label: 'Başka Görev' }];
     }
   });
 
@@ -157,7 +157,7 @@ const MovementManagement = () => {
     import('xlsx').then(XLSX => {
       const data = filteredMovements.map(m => ({
         'Personel': m.personnel ? `${m.personnel.first_name} ${m.personnel.last_name}` : 'Bilinmeyen',
-        'Hareket Türü': m.movement_type,
+        'Hareket Türü': (() => { const typeObj = movementTypes.find((mt: any) => mt.code === m.movement_type); return typeObj ? `[${typeObj.code}] ${typeObj.label}` : m.movement_type; })(),
         'Başlangıç': m.start_date ? format(new Date(m.start_date), 'dd.MM.yyyy', { locale: tr }) : '-',
         'Bitiş': m.end_date ? format(new Date(m.end_date), 'dd.MM.yyyy', { locale: tr }) : '-',
         'Süre (Gün)': m.total_days,
@@ -173,7 +173,7 @@ const MovementManagement = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const actualMovementType = form.movement_type || (movementTypes.length > 0 ? movementTypes[0] : '');
+    const actualMovementType = form.movement_type || (movementTypes.length > 0 ? movementTypes[0].code : '');
     
     if (!form.personnel_id || !actualMovementType || !form.start_date) {
       toast.error('Lütfen personel, hareket türü ve başlangıç tarihini doldurun');
@@ -199,7 +199,7 @@ const MovementManagement = () => {
   const resetForm = () => {
     setIsOpen(false);
     setEditingId(null);
-    setForm({ personnel_id: '', movement_type: movementTypes[0] || '', start_date: '', end_date: '', description: '', total_days: 1 });
+    setForm({ personnel_id: '', movement_type: movementTypes.length > 0 ? movementTypes[0].code : '', start_date: '', end_date: '', description: '', total_days: 1 });
   };
 
   const handleEdit = (m: any) => {
@@ -264,11 +264,11 @@ const MovementManagement = () => {
               </div>
               <div>
                 <Label htmlFor="movement_type">Hareket Türü</Label>
-                <Select value={form.movement_type || movementTypes[0]} onValueChange={(v) => setForm({ ...form, movement_type: v })}>
+                <Select value={form.movement_type || (movementTypes.length > 0 ? movementTypes[0].code : '')} onValueChange={(v) => setForm({ ...form, movement_type: v })}>
                   <SelectTrigger><SelectValue placeholder="Tür seçin" /></SelectTrigger>
                   <SelectContent>
-                    {movementTypes.map((t: string) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {movementTypes.map((t: any) => (
+                      <SelectItem key={t.code} value={t.code}>[{t.code}] {t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -329,7 +329,12 @@ const MovementManagement = () => {
                   ) : filteredMovements.map((m: any) => (
                     <TableRow key={m.id}>
                       <TableCell className="font-medium">{m.personnel ? `${m.personnel.first_name} ${m.personnel.last_name}` : 'Bilinmeyen'}</TableCell>
-                      <TableCell>{m.movement_type}</TableCell>
+                      <TableCell>
+                        {(() => {
+                           const typeObj = movementTypes.find((mt: any) => mt.code === m.movement_type);
+                           return typeObj ? `[${typeObj.code}] ${typeObj.label}` : m.movement_type;
+                        })()}
+                      </TableCell>
                       <TableCell>{m.start_date ? format(new Date(m.start_date), 'dd.MM.yyyy', { locale: tr }) : '-'}</TableCell>
                       <TableCell>{m.end_date ? format(new Date(m.end_date), 'dd.MM.yyyy', { locale: tr }) : '-'}</TableCell>
                       <TableCell>{m.total_days}</TableCell>
@@ -372,7 +377,8 @@ const MovementManagement = () => {
                   ) : personnel.map((p: any) => {
                     const pMovements = movements.filter((m: any) => {
                       if (m.personnel_id !== p.id) return false;
-                      const t = (m.movement_type || '').toLocaleLowerCase('tr-TR');
+                      const typeObj = movementTypes.find((mt: any) => mt.code === m.movement_type);
+                      const t = (typeObj ? typeObj.label : m.movement_type || '').toLocaleLowerCase('tr-TR');
                       return t.includes('yıllık') && t.includes('izin');
                     });
                     const usedLeave = pMovements.reduce((sum: number, m: any) => sum + Number(m.total_days || 1), 0);

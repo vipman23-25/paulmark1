@@ -20,6 +20,8 @@ const DayOffView = () => {
   const [selectedWeeklyIds, setSelectedWeeklyIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [form, setForm] = useState({ personnel_id: '', day_of_week: '', description: '', requested_shift: 'farketmez', admin_response: '', status: 'approved' });
+  const [isPrefOpen, setIsPrefOpen] = useState(false);
+  const [prefForm, setPrefForm] = useState({ id: '', personnel_id: '', day_of_week: '', requested_shift: 'sabah', admin_response: '', status: 'approved' });
 
   const { data: personnel = [], isLoading: pLoading } = useQuery({
     queryKey: ['active_personnel'],
@@ -112,6 +114,40 @@ const DayOffView = () => {
     }
   });
 
+  const upsertPrefMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      await supabase.from('shift_preferences' as any).delete().eq('personnel_id', payload.personnel_id);
+      const { data, error } = await supabase.from('shift_preferences' as any).insert({
+        personnel_id: payload.personnel_id,
+        day_of_week: Number(payload.day_of_week),
+        requested_shift: payload.requested_shift,
+        admin_response: payload.admin_response,
+        status: payload.status
+      }).select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shift_preferences'] });
+      toast.success('Vardiya tercihi atandı/güncellendi!');
+      setIsPrefOpen(false);
+    },
+    onError: (error: any) => toast.error('İşlem başarısız: ' + error.message)
+  });
+
+  const deletePrefMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('shift_preferences' as any).delete().eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shift_preferences'] });
+      toast.success('Vardiya tercihi silindi');
+    },
+    onError: (error: any) => toast.error('Silme başarısız: ' + error.message)
+  });
+
   const updatePreferenceStatusMutation = useMutation({
     mutationFn: async ({ id, status, admin_response }: { id: string, status: string, admin_response?: string }) => {
       const payload: any = { status, admin_response };
@@ -150,6 +186,27 @@ const DayOffView = () => {
       status: dayOff?.status || 'approved'
     });
     setIsOpen(true);
+  };
+
+  const handleEditPref = (p: any, sp: any) => {
+    setPrefForm({
+      id: sp?.id || '',
+      personnel_id: p.id,
+      day_of_week: sp ? sp.day_of_week.toString() : '',
+      requested_shift: sp?.requested_shift || 'sabah',
+      admin_response: sp?.admin_response || '',
+      status: sp?.status || 'approved'
+    });
+    setIsPrefOpen(true);
+  };
+
+  const handlePrefSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prefForm.personnel_id || !prefForm.day_of_week || !prefForm.requested_shift) {
+      toast.error('Lütfen personel, gün ve vardiya seçiniz');
+      return;
+    }
+    upsertPrefMutation.mutate(prefForm);
   };
 
   const isLoading = pLoading || wLoading || spLoading;
@@ -327,6 +384,59 @@ const DayOffView = () => {
       <Card className="glass-card mt-6 border-indigo-100 dark:border-indigo-900/30">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-indigo-600 dark:text-indigo-400">Personel Vardiya Tercihleri</CardTitle>
+          <Dialog open={isPrefOpen} onOpenChange={(o) => { setIsPrefOpen(o); if(!o) setPrefForm({id:'', personnel_id:'', day_of_week:'', requested_shift: 'sabah', admin_response: '', status: 'approved'}); }}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="w-4 h-4 mr-2"/> Yeni Tercih Ata</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Vardiya Tercihi Düzenle</DialogTitle></DialogHeader>
+              <form onSubmit={handlePrefSubmit} className="space-y-4 mt-2">
+                <div>
+                  <Label>Personel</Label>
+                  <Select value={prefForm.personnel_id} onValueChange={(v) => setPrefForm({...prefForm, personnel_id: v})}>
+                    <SelectTrigger><SelectValue placeholder="Personel Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {personnel.map((p: any) => (
+                        <SelectItem key={`pref-p-${p.id}`} value={p.id}>{p.first_name} {p.last_name} ({p.department})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Tercih Edilen Gün</Label>
+                  <Select value={prefForm.day_of_week} onValueChange={(v) => setPrefForm({...prefForm, day_of_week: v})}>
+                    <SelectTrigger><SelectValue placeholder="Gün Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {DAYS.slice(1, 8).map((d, i) => (
+                        <SelectItem key={`pref-d-${i+1}`} value={(i+1).toString()}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>İstenen Vardiya</Label>
+                  <Select value={prefForm.requested_shift} onValueChange={(v) => setPrefForm({...prefForm, requested_shift: v})}>
+                    <SelectTrigger><SelectValue placeholder="Vardiya Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sabah">Sabah</SelectItem>
+                      <SelectItem value="aksam">Akşam</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Yönetici Notu (Opsiyonel)</Label>
+                  <Input 
+                    value={prefForm.admin_response} 
+                    onChange={(e) => setPrefForm({...prefForm, admin_response: e.target.value})} 
+                    placeholder="Onay/Ret açıklaması..."
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={upsertPrefMutation.isPending}>
+                  {upsertPrefMutation.isPending ? 'Kaydediliyor...' : 'Kaydet'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -375,6 +485,26 @@ const DayOffView = () => {
                         {sp.status !== 'pending' && (
                            <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => updatePreferenceStatusMutation.mutate({ id: sp.id, status: 'pending', admin_response: '' })}>Beklemeye Al</Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditPref(p, sp)}
+                        >
+                          <Pencil className="h-4 w-4 text-blue-500 hover:text-blue-700" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm('Vardiya tercihini silmek istediğinizden emin misiniz?')) {
+                              deletePrefMutation.mutate(sp.id);
+                            }
+                          }}
+                          disabled={deletePrefMutation.isPending}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

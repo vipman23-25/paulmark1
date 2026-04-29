@@ -12,7 +12,7 @@ import { read, utils, writeFile } from 'xlsx';
 
 export interface SystemSettings {
   breakLimitMinutes: number;
-  movementTypes: string[];
+  movementTypes: { code: string; label: string }[];
   overtimeTypes: string[];
   taskStatuses?: string[];
   announcementImages?: string[];
@@ -32,7 +32,7 @@ export interface SystemSettings {
 
 const defaultSettings: SystemSettings = {
   breakLimitMinutes: 60,
-  movementTypes: ['İzin', 'Hastalık İzni', 'Muafiyet', 'Başka Görev'],
+  movementTypes: [{ code: 'İ', label: 'İzin' }, { code: 'R', label: 'Hastalık İzni' }, { code: 'M', label: 'Muafiyet' }, { code: 'B', label: 'Başka Görev' }],
   overtimeTypes: ['Fazla Mesai', 'Alacak (Kullanım)'],
   taskStatuses: ['Yapıldı', 'Yapılmadı', 'Beklemede', 'Okudum & Anladım'],
   announcementImages: [],
@@ -52,7 +52,8 @@ const defaultSettings: SystemSettings = {
 
 const SystemSettingsView = () => {
   const queryClient = useQueryClient();
-  const [newMovementType, setNewMovementType] = useState('');
+  const [newMovementCode, setNewMovementCode] = useState('');
+  const [newMovementLabel, setNewMovementLabel] = useState('');
   const [newOvertimeType, setNewOvertimeType] = useState('');
   const [newTaskStatus, setNewTaskStatus] = useState('');
   const [localLimit, setLocalLimit] = useState<string>('');
@@ -129,18 +130,19 @@ const SystemSettingsView = () => {
   };
 
   const addMovementType = () => {
-    if (!newMovementType.trim() || settings.movementTypes.includes(newMovementType.trim())) return;
-    const updated = { ...settings, movementTypes: [...settings.movementTypes, newMovementType.trim()] };
+    if (!newMovementCode.trim() || !newMovementLabel.trim() || settings.movementTypes.some((t: any) => t.code === newMovementCode.trim())) return;
+    const updated = { ...settings, movementTypes: [...settings.movementTypes, { code: newMovementCode.trim(), label: newMovementLabel.trim() }] };
     updateMutation.mutate(updated, {
       onSuccess: () => {
-        setNewMovementType('');
+        setNewMovementCode('');
+        setNewMovementLabel('');
         toast.success('Hareket türü eklendi');
       }
     });
   };
 
-  const removeMovementType = (type: string) => {
-    const updated = { ...settings, movementTypes: settings.movementTypes.filter(t => t !== type) };
+  const removeMovementType = (code: string) => {
+    const updated = { ...settings, movementTypes: settings.movementTypes.filter((t: any) => t.code !== code) };
     updateMutation.mutate(updated, {
       onSuccess: () => toast.success('Hareket türü silindi')
     });
@@ -392,17 +394,24 @@ const SystemSettingsView = () => {
           <CardContent className="space-y-4">
             <div className="flex gap-2">
               <Input
-                placeholder="Yeni tür ekle..."
-                value={newMovementType}
-                onChange={(e) => setNewMovementType(e.target.value)}
+                placeholder="Kısa Kod (Örn: S)"
+                value={newMovementCode}
+                onChange={(e) => setNewMovementCode(e.target.value)}
+                className="w-1/3"
+                maxLength={5}
+              />
+              <Input
+                placeholder="Tür Adı (Örn: Sabah Vardiya)"
+                value={newMovementLabel}
+                onChange={(e) => setNewMovementLabel(e.target.value)}
               />
               <Button onClick={addMovementType} disabled={updateMutation.isPending}><Plus className="w-4 h-4" /></Button>
             </div>
             <ul className="space-y-2">
-              {settings.movementTypes.map((type, idx) => (
+              {settings.movementTypes.map((type: any, idx: number) => (
                 <li key={idx} className="flex justify-between items-center bg-muted/50 p-2 rounded">
-                  <span>{type}</span>
-                  <Button variant="ghost" size="sm" onClick={() => removeMovementType(type)} disabled={updateMutation.isPending} className="text-red-500 hover:text-red-700">
+                  <span><strong className="mr-2 px-2 py-0.5 bg-primary/10 text-primary rounded">{type.code}</strong> {type.label}</span>
+                  <Button variant="ghost" size="sm" onClick={() => removeMovementType(type.code)} disabled={updateMutation.isPending} className="text-red-500 hover:text-red-700">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </li>

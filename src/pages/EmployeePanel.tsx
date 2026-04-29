@@ -94,17 +94,17 @@ const EmployeePanel = () => {
   
   const features = {
     showBreak: pVis.showBreak ?? true,
-    showOvertime: pVis.showOvertime ?? baseFeatures.showOvertime,
-    showBreakViolations: pVis.showBreak ?? baseFeatures.showBreakViolations,
-    showLeaveStatus: pVis.showLeave ?? baseFeatures.showLeaveStatus,
-    showWeeklyDayOff: baseFeatures.showWeeklyDayOff ?? baseFeatures.showLeaveStatus ?? true,
-    showSalesTargets: pVis.showSales ?? baseFeatures.showSalesTargets,
-    showMovements: pVis.showMovements ?? baseFeatures.showMovements,
-    showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders,
+    showOvertime: pVis.showOvertime ?? baseFeatures.showOvertime ?? true,
+    showBreakViolations: pVis.showBreak ?? baseFeatures.showBreakViolations ?? true,
+    showLeaveStatus: pVis.showLeave ?? baseFeatures.showLeaveStatus ?? true,
+    showWeeklyDayOff: pVis.showLeave ?? baseFeatures.showWeeklyDayOff ?? baseFeatures.showLeaveStatus ?? true,
+    showSalesTargets: pVis.showSales ?? baseFeatures.showSalesTargets ?? true,
+    showMovements: pVis.showMovements ?? baseFeatures.showMovements ?? true,
+    showReminders: pVis.showAnnouncements ?? baseFeatures.showReminders ?? true,
     showCargoStatus: pVis.showCargo ?? baseFeatures.showCargoStatus ?? true,
     showLogistics: pVis.showLogistics ?? true,
     showShiftTracking: pVis.showShiftTracking ?? baseFeatures.showShiftTracking ?? true,
-    showShiftVisuals: baseFeatures.showShiftVisuals ?? true,
+    showShiftVisuals: pVis.showShiftTracking ?? baseFeatures.showShiftVisuals ?? true,
   };
 
   const { data: dashboardData, isLoading: loadingData } = useQuery({
@@ -346,7 +346,7 @@ const EmployeePanel = () => {
         if (delErr) throw delErr;
       }
       if (!isSelected) {
-        const payload: any = { personnel_id: personnel.id, day_of_week: day, description, status: 'pending' };
+        const payload: any = { personnel_id: personnel.id, day_of_week: day, description, status: 'approved' };
         const { error: insErr } = await supabase.from('weekly_day_off').insert(payload);
         if (insErr) throw insErr;
         return { deleted: false };
@@ -853,7 +853,7 @@ const EmployeePanel = () => {
         )}
 
         {/* Shift Preference Selection */}
-        {features.showWeeklyDayOff && (
+        {features.showShiftTracking && (
         <Card className="glass-card border-indigo-100 dark:border-indigo-900/30 mt-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
@@ -1044,9 +1044,11 @@ const EmployeePanel = () => {
                             size="icon"
                             className="h-14 w-14 shrink-0 rounded-xl"
                             onClick={() => {
-                              updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes + 1, totalBoxes: shipment.total_boxes, addedCount: 1 });
+                              if (shipment.counted_boxes < shipment.total_boxes) {
+                                updateCargoMutation.mutate({ id: shipment.id, newCount: shipment.counted_boxes + 1, totalBoxes: shipment.total_boxes, addedCount: 1 });
+                              }
                             }}
-                            disabled={updateCargoMutation.isPending}
+                            disabled={shipment.counted_boxes >= shipment.total_boxes || updateCargoMutation.isPending}
                           >
                             <Plus className="h-6 w-6" />
                           </Button>

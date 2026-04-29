@@ -100,8 +100,8 @@ const Dashboard = () => {
         </DropdownMenu>
       </div>
 
-      {visibility.showTodayShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} daysOffset={0} />}
-      {visibility.showTomorrowShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} personnel={activePersonnel} daysOffset={1} />}
+      {visibility.showTodayShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} movements={movements} personnel={activePersonnel} daysOffset={0} />}
+      {visibility.showTomorrowShift && <ShiftCard weeklySchedule={weeklySchedule} breaks={breaks} movements={movements} personnel={activePersonnel} daysOffset={1} />}
       {visibility.showActiveBreaks && <BreaksCard breaks={onBreakRecords} personnel={activePersonnel} />}
       {visibility.showDailyBreaks && <DailyBreaksCard breaks={breaks} personnel={activePersonnel} />}
       {visibility.showMovements && <MovementsCard movements={movements} personnel={activePersonnel} />}
@@ -135,7 +135,7 @@ const LiveBreakBadge = ({ activeBreak }: { activeBreak: any }) => {
   return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 animate-pulse border border-blue-200">Molada ({elapsed}dk, Kalan: {remaining}dk)</span>;
 };
 
-const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { weeklySchedule: any, breaks: any, personnel: any, daysOffset?: number }) => {
+const ShiftCard = ({ weeklySchedule, breaks, movements, personnel, daysOffset = 0 }: { weeklySchedule: any, breaks: any, movements: any, personnel: any, daysOffset?: number }) => {
   if (!weeklySchedule || weeklySchedule.length === 0) return null;
 
   const daysTr = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
@@ -269,6 +269,32 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
     return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">Mola Bitti ({totalFinishedDuration}dk)</span>;
   };
 
+  const getMovementBadge = (pString: string) => {
+    if (!personnel || !movements) return null;
+    
+    const nameOnly = pString.split('+')[0].trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ');
+    const person = personnel.find((per: any) => 
+      `${per.first_name} ${per.last_name}`.trim().toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ') === nameOnly
+    );
+    
+    if (!person) return null;
+
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysOffset);
+    // Use string comparison for dates (YYYY-MM-DD) to be safe against timezones
+    const targetStr = targetDate.toISOString().split('T')[0];
+
+    const activeMovement = movements.find((m: any) => {
+      if (m.personnel_id !== person.id) return false;
+      return m.start_date <= targetStr && m.end_date >= targetStr;
+    });
+
+    if (activeMovement) {
+      return <span className="shrink-0 ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-warning/20 text-warning border border-warning/30" title="Aktif Hareket">{activeMovement.movement_type}</span>;
+    }
+    return null;
+  };
+
   return (
     <Card className="glass-card border-primary/20 bg-card">
       <CardHeader className="bg-primary/5 pb-3">
@@ -290,7 +316,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Sabah'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p}</span>
+                        <span className="truncate pr-1 leading-tight flex items-center gap-1">{p} {getMovementBadge(p)}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -305,7 +331,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Akşam'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p}</span>
+                        <span className="truncate pr-1 leading-tight flex items-center gap-1">{p} {getMovementBadge(p)}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -320,7 +346,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['İzinli'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p}</span>
+                        <span className="truncate pr-1 leading-tight flex items-center gap-1">{p} {getMovementBadge(p)}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}
@@ -335,7 +361,7 @@ const ShiftCard = ({ weeklySchedule, breaks, personnel, daysOffset = 0 }: { week
                   <ul className="text-sm space-y-1.5">
                     {cats['Ek Görev (Sınıflandırılmamış Shift)'].map((p, i) => (
                       <li key={i} className="text-foreground flex items-center justify-between border-b border-border/30 pb-1 last:border-0 last:pb-0">
-                        <span className="truncate pr-1 leading-tight">{p}</span>
+                        <span className="truncate pr-1 leading-tight flex items-center gap-1">{p} {getMovementBadge(p)}</span>
                         {getBreakBadge(p)}
                       </li>
                     ))}

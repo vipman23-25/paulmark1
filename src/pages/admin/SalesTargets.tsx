@@ -21,7 +21,7 @@ const SalesTargets = () => {
   const [selectedMonth, setSelectedMonth] = useState(getInitialMonth());
   const [isOpen, setIsOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<any>(null);
-  const [form, setForm] = useState({ target_quota: 0, realized_sales: 0 });
+  const [form, setForm] = useState<{ target_quota: number | string; realized_sales: number | string }>({ target_quota: '', realized_sales: '' });
 
   const { data: personnel = [], isLoading: pLoading } = useQuery({
     queryKey: ['active_personnel_sales'],
@@ -68,8 +68,8 @@ const SalesTargets = () => {
     const existing = salesTargets.find((s: any) => s.personnel_id === p.id);
     setEditingRow(p);
     setForm({
-      target_quota: existing ? existing.target_quota : 0,
-      realized_sales: existing ? existing.realized_sales : 0,
+      target_quota: existing ? existing.target_quota : '',
+      realized_sales: existing ? existing.realized_sales : '',
     });
     setIsOpen(true);
   };
@@ -80,8 +80,8 @@ const SalesTargets = () => {
     upsertMutation.mutate({
       personnel_id: editingRow.id,
       target_month: selectedMonth,
-      target_quota: Number(form.target_quota),
-      realized_sales: Number(form.realized_sales)
+      target_quota: Number(form.target_quota) || 0,
+      realized_sales: Number(form.realized_sales) || 0
     });
   };
 
@@ -218,11 +218,11 @@ const SalesTargets = () => {
           <form onSubmit={handleSubmit} className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Aylık Hedef Kota (₺)</Label>
-              <Input type="number" min="0" step="0.01" value={form.target_quota} onChange={e => setForm({...form, target_quota: Number(e.target.value)})} />
+              <Input type="number" min="0" step="0.01" value={form.target_quota} onChange={e => setForm({...form, target_quota: e.target.value === '' ? '' : Number(e.target.value)})} />
             </div>
             <div className="space-y-2">
               <Label>Yapılan Satış (₺)</Label>
-              <Input type="number" min="0" step="0.01" value={form.realized_sales} onChange={e => setForm({...form, realized_sales: Number(e.target.value)})} />
+              <Input type="number" min="0" step="0.01" value={form.realized_sales} onChange={e => setForm({...form, realized_sales: e.target.value === '' ? '' : Number(e.target.value)})} />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>İptal</Button>

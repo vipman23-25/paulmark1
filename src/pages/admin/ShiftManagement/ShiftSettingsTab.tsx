@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Eye, EyeOff } from 'lucide-react';
 
 const DAYS = ['', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
@@ -21,20 +21,45 @@ const ShiftSettingsTab = () => {
   const { data: shiftCodes, isLoading: loadingCodes } = useQuery({
     queryKey: ['system_settings_shift_codes'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'shift_codes').maybeSingle();
-      if (error) throw error;
-      return data?.setting_value || [
-        { code: 'S', label: 'S - Sabah' },
-        { code: 'A', label: 'A - Akşam' },
-        { code: 'S+M', label: 'S+M - Sabah Mutfak' },
-        { code: 'A+M', label: 'A+M - Akşam Mutfak' },
-        { code: 'S+D', label: 'S+D - Sabah Depo' },
-        { code: 'A+D', label: 'A+D - Akşam Depo' },
-        { code: 'İ', label: 'İ - İzin' },
-        { code: 'R', label: 'R - Raporlu' },
-        { code: 'O', label: 'O - Ortak' },
-        { code: '-', label: '-' }
+      // Vardiya kodları
+      const { data: shiftCodesData, error: shiftError } = await supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'shift_codes').maybeSingle();
+      if (shiftError) throw shiftError;
+      
+      // Personel Hareket Türleri (general)
+      const { data: generalData } = await supabase.from('system_settings' as any).select('setting_value').eq('setting_key', 'general').maybeSingle();
+      const movementTypes = generalData?.setting_value?.movementTypes || [];
+
+      let currentCodes = shiftCodesData?.setting_value || [
+        { code: 'S', label: 'S - Sabah', is_active: true },
+        { code: 'A', label: 'A - Akşam', is_active: true },
+        { code: 'S+M', label: 'S+M - Sabah Mutfak', is_active: true },
+        { code: 'A+M', label: 'A+M - Akşam Mutfak', is_active: true },
+        { code: 'S+D', label: 'S+D - Sabah Depo', is_active: true },
+        { code: 'A+D', label: 'A+D - Akşam Depo', is_active: true },
+        { code: 'İ', label: 'İ - İzin', is_active: true },
+        { code: 'R', label: 'R - Raporlu', is_active: true },
+        { code: 'O', label: 'O - Ortak', is_active: true },
+        { code: '-', label: '-', is_active: true }
       ];
+
+      // Hareket türlerinden eksik olanları Pasif olarak ekle
+      let hasNew = false;
+      movementTypes.forEach((mt: any) => {
+          if (!currentCodes.some((c: any) => c.code === mt.code)) {
+              currentCodes.push({ code: mt.code, label: mt.label, is_active: false });
+              hasNew = true;
+          }
+      });
+
+      // Eğer yeni hareket türü eklendiyse, arka planda kaydet
+      if (hasNew) {
+          await supabase.from('system_settings' as any).upsert({
+             setting_key: 'shift_codes',
+             setting_value: currentCodes
+          }, { onConflict: 'setting_key' });
+      }
+
+      return currentCodes;
     }
   });
 
@@ -66,6 +91,16 @@ const ShiftSettingsTab = () => {
           return toast.error(`${codeToRemove} kodu sistemin ana dağıtım motoru için gereklidir, silinemez.`);
       }
       const updated = (shiftCodes || []).filter((c: any) => c.code !== codeToRemove);
+      upsertShiftCodes.mutate(updated);
+  };
+
+  const handleToggleCode = (codeToToggle: string) => {
+      const updated = (shiftCodes || []).map((c: any) => {
+          if (c.code === codeToToggle) {
+              return { ...c, is_active: c.is_active === false ? true : false };
+          }
+          return c;
+      });
       upsertShiftCodes.mutate(updated);
   };
 
@@ -262,14 +297,19 @@ const ShiftSettingsTab = () => {
 
            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {shiftCodes?.map((c: any) => (
-                  <div key={c.code} className="flex items-center justify-between bg-muted/30 border rounded p-2">
+                  <div key={c.code} className={`flex items-center justify-between border rounded p-2 transition-all ${c.is_active !== false ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 opacity-60'}`}>
                       <div className="overflow-hidden">
                          <p className="font-bold text-sm truncate" title={c.code}>{c.code}</p>
                          <p className="text-xs text-muted-foreground truncate" title={c.label}>{c.label}</p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleRemoveCode(c.code)} className="h-6 w-6 text-muted-foreground hover:text-red-500">
-                          <Trash2 className="w-3 h-3" />
-                      </Button>
+                      <div className="flex flex-col gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleToggleCode(c.code)} className={`h-6 w-6 ${c.is_active !== false ? 'text-emerald-600' : 'text-muted-foreground'}`} title={c.is_active !== false ? 'Gizle' : 'Göster'}>
+                              {c.is_active !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleRemoveCode(c.code)} className="h-6 w-6 text-muted-foreground hover:text-red-500" title="Sil">
+                              <Trash2 className="w-3 h-3" />
+                          </Button>
+                      </div>
                   </div>
               ))}
            </div>

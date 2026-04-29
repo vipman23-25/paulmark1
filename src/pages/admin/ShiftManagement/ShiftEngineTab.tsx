@@ -90,8 +90,16 @@ const ShiftEngineTab = () => {
     const weekDates = getWeekDates(selectedWeekStart);
     const newGrid: any[] = [];
 
-    const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
-    const depts = Array.from(new Set(engineContext.personnel.map((p: any) => p.department)));
+    const getVirtualDept = (dept: string) => {
+        const lowerDept = dept.toLowerCase();
+        if (lowerDept.includes('kadın') || lowerDept.includes('çocuk') || lowerDept.includes('bayan')) {
+            return 'Kadın & Çocuk Reyon';
+        }
+        return dept;
+    };
+
+    const targetOrder = ['Müdür', 'Kadın & Çocuk Reyon', 'Erkek Reyon', 'Kasiyer'];
+    const depts = Array.from(new Set(engineContext.personnel.map((p: any) => getVirtualDept(p.department))));
     depts.sort((a, b) => {
       let ia = targetOrder.indexOf(a);
       let ib = targetOrder.indexOf(b);
@@ -104,20 +112,28 @@ const ShiftEngineTab = () => {
     let collisionError = "";
 
     depts.forEach(dept => {
-      const deptStaff = engineContext.personnel.filter(p => p.department === dept);
+      const deptStaff = engineContext.personnel.filter(p => getVirtualDept(p.department) === dept);
       const rows: any[] = [];
       
       // Step 1: Initialize rows and map absences (Rule 4)
       deptStaff.forEach(p => {
-        const row: any = { personnel_id: p.id, adSoyad: `${p.first_name} ${p.last_name}`, department: dept, shifts: {} };
+        const row: any = { personnel_id: p.id, adSoyad: `${p.first_name} ${p.last_name}`, department: dept, originalDept: p.department, shifts: {} };
         const pMovements = engineContext.movements.filter(m => m.personnel_id === p.id);
         
         weekDates.forEach((dateStr) => {
-            const hasMovement = pMovements.some(m => m.start_date <= dateStr && m.end_date >= dateStr);
-            if (hasMovement) row.shifts[dateStr] = 'R';
+            const hasMovement = pMovements.find(m => m.start_date <= dateStr && (!m.end_date || m.end_date >= dateStr));
+            if (hasMovement && hasMovement.movement_type) {
+                row.shifts[dateStr] = hasMovement.movement_type;
+            }
         });
         rows.push(row);
       });
+
+      // Müdür için atama döngüsünden çık
+      if (dept.toLowerCase().includes('müdür')) {
+          newGrid.push(...rows);
+          return; // Continue to next dept
+      }
 
       // Step 2: Map explicit Day Offs (Rule 1)
       deptStaff.forEach((p, idx) => {
@@ -181,7 +197,7 @@ const ShiftEngineTab = () => {
       });
 
       // Step 6: Distribution Algorithm (Rule 5)
-      weekDates.forEach((dateStr) => {
+      weekDates.forEach((dateStr, dIdx) => {
           const unassignedRows = rows.filter(r => !r.shifts[dateStr]);
           if (unassignedRows.length === 0) return;
 
@@ -194,8 +210,10 @@ const ShiftEngineTab = () => {
           if (totalActive === 2) { targetS = 1; targetA = 1; }
           else if (totalActive === 3) { targetS = 1; targetA = 2; }
           else if (totalActive === 4) { targetS = 2; targetA = 2; }
-          else if (totalActive >= 5) { targetS = 2; targetA = totalActive - 2; }
-          else if (totalActive === 1) { targetS = 1; targetA = 0; }
+          else if (totalActive === 5) { targetS = 2; targetA = 3; }
+          else if (totalActive === 6) { targetS = 2; targetA = 4; }
+          else if (totalActive >= 7) { targetS = 3; targetA = totalActive - 3; }
+          else if (totalActive === 1) { targetS = 0; targetA = 1; } // Prioritize A when 1 left
 
           const dRule = engineContext.deptRules.find(r => r.department_name === dept);
           if (dRule) {
@@ -206,13 +224,45 @@ const ShiftEngineTab = () => {
           let currentS = activeRows.filter(r => r.shifts[dateStr] === 'S').length;
           let currentA = activeRows.filter(r => r.shifts[dateStr] === 'A').length;
 
+          // Rotation & Balancing Logic
+          unassignedRows.sort((rA, rB) => {
+              const prevDateStr = dIdx > 0 ? weekDates[dIdx - 1] : null;
+              const rAPrev = prevDateStr ? rA.shifts[prevDateStr] : null;
+              const rBPrev = prevDateStr ? rB.shifts[prevDateStr] : null;
+
+              let scoreA = 0;
+              let scoreB = 0;
+
+              // 1. Rotation (Avoid same shift consecutively)
+              if (rAPrev === 'S') scoreA -= 10;
+              if (rAPrev === 'A') scoreA += 10;
+
+              if (rBPrev === 'S') scoreB -= 10;
+              if (rBPrev === 'A') scoreB += 10;
+
+              // 2. Weekly Max 4 Evenings (Fairness Rule)
+              const rAWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rA.shifts[d])).length;
+              const rBWeekAksam = weekDates.filter(d => ['A', 'A+M', 'A+D'].includes(rB.shifts[d])).length;
+
+              if (rAWeekAksam >= 4) scoreA += 50; // High priority for S
+              if (rBWeekAksam >= 4) scoreB += 50;
+
+              // 3. Monthly Balance
+              const pastSabahCountA = engineContext.pastSchedules.filter(s => s.personnel_id === rA.personnel_id && ['S', 'Sabah'].includes(s.shift_type)).length;
+              const pastAksamCountA = engineContext.pastSchedules.filter(s => s.personnel_id === rA.personnel_id && ['A', 'Akşam'].includes(s.shift_type)).length;
+              if (pastAksamCountA > pastSabahCountA) scoreA += 5;
+
+              const pastSabahCountB = engineContext.pastSchedules.filter(s => s.personnel_id === rB.personnel_id && ['S', 'Sabah'].includes(s.shift_type)).length;
+              const pastAksamCountB = engineContext.pastSchedules.filter(s => s.personnel_id === rB.personnel_id && ['A', 'Akşam'].includes(s.shift_type)).length;
+              if (pastAksamCountB > pastSabahCountB) scoreB += 5;
+
+              return scoreB - scoreA; // Descending order (highest S score first)
+          });
+
           unassignedRows.forEach(row => {
-             const pastSabahCount = engineContext.pastSchedules.filter(s => s.personnel_id === row.personnel_id && ['S', 'Sabah'].includes(s.shift_type)).length;
-             const pastAksamCount = engineContext.pastSchedules.filter(s => s.personnel_id === row.personnel_id && ['A', 'Akşam'].includes(s.shift_type)).length;
-             
              let assignS = false;
              if (currentS < targetS && currentA < targetA) {
-                 assignS = pastSabahCount <= pastAksamCount;
+                 assignS = true; // since it's sorted, give S to the top scorer
              } else if (currentS < targetS) {
                  assignS = true;
              } else {
@@ -287,7 +337,7 @@ const ShiftEngineTab = () => {
   const generateExcel = () => {
     if (!isGenerated) return;
     const weekDates = getWeekDates(selectedWeekStart);
-    const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
+    const targetOrder = ['Müdür', 'Kadın & Çocuk Reyon', 'Erkek Reyon', 'Kasiyer'];
     const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
     currentDepts.sort((a, b) => {
       let ia = targetOrder.indexOf(a);
@@ -303,7 +353,7 @@ const ShiftEngineTab = () => {
     currentDepts.forEach(dept => {
         const deptRows = generatedGrid.filter(r => r.department === dept);
         deptRows.forEach(row => {
-          const obj: any = { 'Departman': row.department, 'Ad Soyad': row.adSoyad };
+          const obj: any = { 'Grup': row.department, 'Orijinal Departman': row.originalDept, 'Ad Soyad': row.adSoyad };
           weekDates.forEach((dateStr, i) => { obj[`${DAYS[i]} (${dateStr})`] = row.shifts[dateStr]; });
           exportData.push(obj);
         });
@@ -380,8 +430,8 @@ const ShiftEngineTab = () => {
                           </tr>
                        </thead>
                        <tbody>
-                          {(() => {
-                            const targetOrder = ['Müdür', 'Çocuk Reyon', 'Kadın Reyon', 'Erkek Reyon', 'Kasiyer'];
+                           {(() => {
+                            const targetOrder = ['Müdür', 'Kadın & Çocuk Reyon', 'Erkek Reyon', 'Kasiyer'];
                             const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
                             currentDepts.sort((a, b) => {
                               let ia = targetOrder.indexOf(a);
@@ -421,7 +471,7 @@ const ShiftEngineTab = () => {
                                                   <tr key={row.personnel_id} className="border-b border-black/20 hover:bg-black/5">
                                                       <td className="text-center font-bold text-xs border-r border-black/20">{globalRowCounter++}</td>
                                                       <td className="font-bold border-r border-black/20 pl-3 uppercase">{row.adSoyad}</td>
-                                                      <td className="font-bold italic text-xs border-r border-black/20 pl-3 uppercase">{row.department}</td>
+                                                      <td className="font-bold italic text-xs border-r border-black/20 pl-3 uppercase">{row.originalDept}</td>
                                                       {getWeekDates(selectedWeekStart).map(dateStr => {
                                                           const val = row.shifts[dateStr] || '';
                                                           return (
@@ -431,7 +481,7 @@ const ShiftEngineTab = () => {
                                                                     value={val}
                                                                     onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
                                                                   >
-                                                                    {engineContext.shiftCodes.map((c: any) => (
+                                                                    {engineContext.shiftCodes.filter((c: any) => c.is_active !== false).map((c: any) => (
                                                                         <option key={c.code} value={c.code}>{c.label}</option>
                                                                     ))}
                                                                   </select>

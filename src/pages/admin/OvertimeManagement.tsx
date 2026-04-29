@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Download, Plus, Trash2, Timer, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
@@ -23,6 +24,7 @@ const OvertimeManagement = () => {
   const [form, setForm] = useState({
     personnel_id: '', record_date: '', days: '', hours: '', minutes: '', record_type: '', description: '',
   });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const { data: personnel = [] } = useQuery({
     queryKey: ['active_personnel'],
@@ -106,6 +108,42 @@ const OvertimeManagement = () => {
     },
     onError: (error: any) => toast.error('Silme başarısız: ' + error.message)
   });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from('overtime_records').delete().in('id', ids);
+      if (error) throw error;
+      return ids;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['overtime_records'] });
+      toast.success('Seçili kayıtlar silindi');
+      setSelectedIds([]);
+    },
+    onError: (error: any) => toast.error('Toplu silme başarısız: ' + error.message)
+  });
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === records.length && records.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(records.map((r: any) => r.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (confirm(`Seçili ${selectedIds.length} kaydı silmek istediğinize emin misiniz?`)) {
+      bulkDeleteMutation.mutate(selectedIds);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -218,6 +256,11 @@ const OvertimeManagement = () => {
           <Timer className="h-6 w-6" /> Fazla Mesai / Alacak Takibi
         </h2>
         <div className="flex gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
+              <Trash2 className="w-4 h-4 mr-2" /> Toplu Sil ({selectedIds.length})
+            </Button>
+          )}
           <Button variant="outline" onClick={exportToExcel}><Download className="w-4 h-4 mr-2" /> Excel İndir</Button>
           <Button variant="outline" size="icon" onClick={() => refetch()} title="Yenile">
             <RefreshCw className="h-4 w-4" />
@@ -309,6 +352,13 @@ const OvertimeManagement = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox 
+                      checked={records.length > 0 && selectedIds.length === records.length}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Tümünü seç"
+                    />
+                  </TableHead>
                   <TableHead>Personel</TableHead>
                   <TableHead>Tür</TableHead>
                   <TableHead>Tarih</TableHead>
@@ -321,10 +371,17 @@ const OvertimeManagement = () => {
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground animate-pulse">Kayıtlar yükleniyor...</TableCell></TableRow>
                 ) : records.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Kayıt bulunamadı</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Kayıt bulunamadı</TableCell></TableRow>
                 ) : (
                   records.map((r: any) => (
                     <TableRow key={r.id}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedIds.includes(r.id)}
+                          onCheckedChange={() => toggleSelect(r.id)}
+                          aria-label="Kaydı seç"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{r.personnel ? `${r.personnel.first_name} ${r.personnel.last_name}` : 'Bilinmeyen'}</TableCell>
                       <TableCell>
                         <Badge variant={!(r.record_type || '').toLowerCase().includes('alacak') && !(r.record_type || '').toLowerCase().includes('kullanım') ? 'default' : 'secondary'}>
