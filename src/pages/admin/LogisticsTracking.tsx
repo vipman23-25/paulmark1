@@ -19,7 +19,6 @@ const LogisticsTracking = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCompaniesOpen, setIsCompaniesOpen] = useState(false);
   const [newCompany, setNewCompany] = useState('');
-  const [trackingInquiry, setTrackingInquiry] = useState('');
 
   const [form, setForm] = useState({
     company_name: '',
@@ -173,26 +172,6 @@ const LogisticsTracking = () => {
           <Truck className="w-6 h-6" /> Kargo Takip
         </h2>
 
-        <div className="flex items-center gap-2 w-full lg:w-auto bg-muted/30 p-1.5 rounded-lg border border-border/50">
-          <Input 
-             placeholder="DHL Takip No Sorgula..." 
-             value={trackingInquiry}
-             onChange={e => setTrackingInquiry(e.target.value)}
-             className="bg-background h-9 lg:w-[200px]"
-          />
-          <Button 
-             size="sm" 
-             disabled={!trackingInquiry || !trackingInquiry.trim()}
-             onClick={(e) => {
-                 e.preventDefault();
-                 window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${trackingInquiry.trim()}`, '_blank');
-             }}
-             className="h-9 whitespace-nowrap px-4"
-          >
-             Sorgula
-          </Button>
-        </div>
-
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
           <Dialog open={isCompaniesOpen} onOpenChange={setIsCompaniesOpen}>
             <DialogTrigger asChild>
@@ -309,13 +288,13 @@ const LogisticsTracking = () => {
                              e.preventDefault();
                              e.stopPropagation();
                              const tNumber = item.tracking_number ? String(item.tracking_number).trim() : '';
-                             setTrackingInquiry(tNumber);
                              if (tNumber) {
-                                 window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${tNumber}`, '_blank');
+                                 navigator.clipboard.writeText(tNumber);
+                                 toast.success('Takip numarası kopyalandı!');
                              }
                           }}
                           className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-800 transition-colors text-left"
-                          title="Sorgulamak için tıklayın"
+                          title="Kopyalamak için tıklayın"
                         >
                           {item.tracking_number || '-'}
                         </button>
