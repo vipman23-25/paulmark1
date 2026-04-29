@@ -474,11 +474,11 @@ const ShiftEngineTab = () => {
                        </thead>
                        <tbody>
                            {(() => {
-                            const targetOrder = ['Müdür', 'Kadın & Çocuk Reyon', 'Erkek Reyon', 'Kasiyer'];
-                            const currentDepts = Array.from(new Set(generatedGrid.map(r => r.department)));
+                            const finalOrder = ['müdür', 'kasiyer', 'çocuk', 'kadın', 'bayan', 'erkek'];
+                            const currentDepts = Array.from(new Set(generatedGrid.map(r => r.originalDept)));
                             currentDepts.sort((a, b) => {
-                              let ia = targetOrder.indexOf(a);
-                              let ib = targetOrder.indexOf(b);
+                              let ia = finalOrder.findIndex(dept => a.toLowerCase().includes(dept));
+                              let ib = finalOrder.findIndex(dept => b.toLowerCase().includes(dept));
                               if (ia === -1) ia = 999;
                               if (ib === -1) ib = 999;
                               if (ia !== ib) return ia - ib;
@@ -491,7 +491,7 @@ const ShiftEngineTab = () => {
                             return (
                                 <>
                                 {currentDepts.map((dept, deptIdx) => {
-                                    const deptRows = generatedGrid.filter(r => r.department === dept);
+                                    const deptRows = generatedGrid.filter(r => r.originalDept === dept);
                                     if (deptRows.length === 0) return null;
 
                                     const dailyTotals = getWeekDates(selectedWeekStart).map(dateStr => {
