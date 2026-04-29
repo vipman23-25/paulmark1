@@ -148,6 +148,7 @@ const ShiftEngineTab = () => {
       deptStaff.forEach((p, idx) => {
         const row = rows[idx];
         const pDayOffs = engineContext.dayOffs.filter(d => d.personnel_id === p.id);
+        row.debug_dayoffs = pDayOffs;
         
         weekDates.forEach((dateStr, dIdx) => {
            const dayOfWeek = dIdx + 1; // 0=Mon->1, 1=Tue->2, ... 6=Sun->7
@@ -505,7 +506,12 @@ const ShiftEngineTab = () => {
                                               return (
                                                   <tr key={row.personnel_id} className="border-b border-black/20 hover:bg-black/5">
                                                       <td className="text-center font-bold text-xs border-r border-black/20">{globalRowCounter++}</td>
-                                                      <td className="font-bold border-r border-black/20 pl-3 uppercase">{row.adSoyad}</td>
+                                                      <td className="font-bold border-r border-black/20 pl-3 uppercase">
+                                                          {row.adSoyad}
+                                                          {row.debug_dayoffs && row.debug_dayoffs.length > 0 && (
+                                                              <span className="text-[10px] text-red-500 ml-2">[{row.debug_dayoffs.map((d:any) => d.day_of_week).join(',')}]</span>
+                                                          )}
+                                                      </td>
                                                       <td className="font-bold italic text-xs border-r border-black/20 pl-3 uppercase">{row.originalDept}</td>
                                                       {getWeekDates(selectedWeekStart).map(dateStr => {
                                                           const val = row.shifts[dateStr] || '';
