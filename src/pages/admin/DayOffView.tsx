@@ -62,6 +62,7 @@ const DayOffView = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
+      queryClient.invalidateQueries({ queryKey: ['shift_engine_context'] });
       toast.success('Haftalık izin atandı/güncellendi!');
       setIsOpen(false);
       setForm({ personnel_id: '', day_of_week: '', description: '', requested_shift: 'farketmez', admin_response: '', status: 'approved' });
@@ -77,6 +78,7 @@ const DayOffView = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
+      queryClient.invalidateQueries({ queryKey: ['shift_engine_context'] });
       toast.success('Haftalık izin silindi');
     },
     onError: (error: any) => toast.error('Silme başarısız: ' + error.message)
@@ -90,6 +92,7 @@ const DayOffView = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
+      queryClient.invalidateQueries({ queryKey: ['shift_engine_context'] });
       toast.success(`${data.length} haftalık izin silindi`);
       setSelectedWeeklyIds([]);
     },
@@ -110,6 +113,7 @@ const DayOffView = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weekly_day_offs'] });
+      queryClient.invalidateQueries({ queryKey: ['shift_engine_context'] });
       toast.success('İzin durumu güncellendi');
     }
   });
@@ -156,6 +160,7 @@ const DayOffView = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift_preferences'] });
+      queryClient.invalidateQueries({ queryKey: ['shift_engine_context'] });
       toast.success('Vardiya tercihi durumu güncellendi');
     }
   });
