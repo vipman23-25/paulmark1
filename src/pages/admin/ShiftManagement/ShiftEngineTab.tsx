@@ -499,7 +499,7 @@ const ShiftEngineTab = () => {
                                                                     onChange={e => handleCellChange(row.personnel_id, dateStr, e.target.value)}
                                                                   >
                                                                     {engineContext.shiftCodes.filter((c: any) => c.is_active !== false).map((c: any) => (
-                                                                        <option key={c.code} value={c.code}>{c.label}</option>
+                                                                        <option key={c.code} value={c.code}>{c.code}</option>
                                                                     ))}
                                                                   </select>
                                                               </td>
