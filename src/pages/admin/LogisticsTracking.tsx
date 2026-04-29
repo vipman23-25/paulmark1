@@ -289,9 +289,28 @@ const LogisticsTracking = () => {
                              e.stopPropagation();
                              const tNumber = item.tracking_number ? String(item.tracking_number).trim() : '';
                              if (tNumber) {
-                                 navigator.clipboard.writeText(tNumber);
-                                 toast.success('Takip numarası kopyalandı!');
                                  window.open(`https://www.dhlecommerce.com.tr/gonderi-takip?id=${tNumber}`, '_blank');
+                                 
+                                 try {
+                                     if (navigator.clipboard && navigator.clipboard.writeText) {
+                                         navigator.clipboard.writeText(tNumber);
+                                         toast.success('Takip numarası kopyalandı!');
+                                     } else {
+                                         const textArea = document.createElement("textarea");
+                                         textArea.value = tNumber;
+                                         document.body.appendChild(textArea);
+                                         textArea.select();
+                                         try {
+                                             document.execCommand('copy');
+                                             toast.success('Takip numarası kopyalandı!');
+                                         } catch (err) {
+                                             console.error('Kopyalama hatası', err);
+                                         }
+                                         document.body.removeChild(textArea);
+                                     }
+                                 } catch(err) {
+                                     console.error('Pano hatası:', err);
+                                 }
                              }
                           }}
                           className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:underline hover:text-blue-800 transition-colors text-left"
