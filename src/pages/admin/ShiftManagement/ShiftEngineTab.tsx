@@ -156,6 +156,10 @@ const ShiftEngineTab = () => {
            let dayOfWeek = localDate.getDay();
            if (dayOfWeek === 0) dayOfWeek = 7;
 
+           // DEBUG
+           if (!row.debug_days) row.debug_days = {};
+           row.debug_days[dateStr] = dayOfWeek;
+
            if (pDayOffs.some(d => Number(d.day_of_week) === dayOfWeek) && !row.shifts[dateStr]) {
                row.shifts[dateStr] = 'İ'; // Haftalık izin
            }
